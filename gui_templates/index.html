@@ -40,6 +40,33 @@
                 value="{{ default_year }}"
               />
             </label>
+            <label>
+              OpenAI API key
+              <input
+                id="openai-key"
+                name="openai_api_key"
+                type="password"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="sk-..."
+              />
+            </label>
+            <p class="field-note">
+              Used only for this run. Not written to disk. Kept in this browser
+              tab until you close it. Leave blank if <code>.env</code> already
+              has <code>OPENAI_API_KEY</code>.
+            </p>
+            <label>
+              Model
+              <input
+                id="openai-model"
+                name="openai_model"
+                type="text"
+                spellcheck="false"
+                autocomplete="off"
+                placeholder="gpt-4o-mini"
+              />
+            </label>
             <details class="advanced">
               <summary>Optional overrides</summary>
               <label>
@@ -77,9 +104,9 @@
         <main class="main">
           <div class="empty" id="empty">
             <p>
-              Enter a ticker and run. The data aggregator pulls statements, the 10-K,
-              similar stocks, and bond identifiers. The competitive and qualitative
-              analysts then reason independently over that evidence.
+              Enter a ticker, an OpenAI API key, and run. Competitive, Qualitative,
+              the assumption reviewer, and the writer each call the model.
+              WACC and DCF stay in Python.
             </p>
             <p class="hint">
               Banks and other financials are out of scope for this FCFF model.

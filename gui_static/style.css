@@ -91,6 +91,17 @@ input:focus {
   outline-offset: 1px;
 }
 
+.field-note {
+  margin: -4px 0 12px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.field-note code {
+  font-size: 10px;
+}
+
 .advanced {
   margin: 4px 0 8px;
   color: var(--muted);

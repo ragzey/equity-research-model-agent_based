@@ -23,7 +23,7 @@ from ..tools.firm_classifier import (
     extract_operating_baseline,
 )
 from ..tools.qual_to_quant import generate_valuation_overrides
-from ..utils.llm_client import chat_json, llm_configured
+from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("ValuationAssumptionReviewer")
 
@@ -127,6 +127,7 @@ def _llm_decisions(
             {"role": "user", "content": user},
         ],
         timeout=90,
+        required=True,
     )
     return parsed or {}
 
@@ -151,17 +152,18 @@ def valuation_assumption_reviewer_node(
         "high_growth_rate": baseline["high_growth_rate"],
     }
 
-    mode = "deterministic"
-    llm_payload: Dict[str, Any] = {}
-    decisions: List[Dict[str, Any]] = []
-    if llm_configured():
-        llm_payload = _llm_decisions(state, baseline, proposed)
-        raw_decisions = llm_payload.get("decisions")
-        if isinstance(raw_decisions, list) and raw_decisions:
-            mode = "llm"
-            decisions = [item for item in raw_decisions if isinstance(item, dict)]
-        else:
-            logger.warning("Reviewer LLM returned no usable decisions; auto-accepting candidates.")
+    llm_payload = _llm_decisions(state, baseline, proposed)
+    raw_decisions = llm_payload.get("decisions")
+    if not isinstance(raw_decisions, list) or not raw_decisions:
+        raise LLMCallError(
+            "Assumption reviewer did not return accept/reject decisions."
+        )
+    mode = "llm"
+    decisions = [item for item in raw_decisions if isinstance(item, dict)]
+    if not decisions:
+        raise LLMCallError(
+            "Assumption reviewer did not return usable accept/reject decisions."
+        )
 
     overrides = apply_override_decisions(
         proposed,
@@ -173,9 +175,7 @@ def valuation_assumption_reviewer_node(
     notes_to_writer = str(llm_payload.get("notes_to_writer") or "").strip()
     if not notes_to_quant:
         notes_to_quant = (
-            "Deterministic auto-accept: Quant may use the Python-proposed bounded overrides."
-            if mode == "deterministic"
-            else "Quant may use only accepted overrides; rejected keys reverted to baseline."
+            "Quant may use only accepted overrides; rejected keys reverted to baseline."
         )
     if not notes_to_writer:
         accepted = [row["key"] for row in overrides["decisions"] if row["action"] == "accept"]

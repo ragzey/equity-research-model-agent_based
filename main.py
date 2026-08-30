@@ -17,6 +17,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from equity_research.graphs.defaults import initial_state
 from equity_research.graphs.graph import build_research_graph
+from equity_research.utils.llm_client import llm_session, require_llm
 
 logger = logging.getLogger("ResearchPipelineCLI")
 
@@ -35,6 +36,8 @@ def run_pipeline(
     target_year: str,
     peer_tickers: Optional[List[str]] = None,
     target_bonds: Optional[List[str]] = None,
+    openai_api_key: Optional[str] = None,
+    openai_model: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Initialize state, invoke the compiled graph, and return final state."""
     clean_ticker = ticker.strip().upper()
@@ -59,7 +62,9 @@ def run_pipeline(
         target_bonds=bonds or None,
         competitor_tickers=peers or None,
     )
-    final_state = build_research_graph().invoke(starting_state)
+    with llm_session(api_key=openai_api_key, model=openai_model):
+        require_llm()
+        final_state = build_research_graph().invoke(starting_state)
     logger.info("Pipeline completed successfully for %s", clean_ticker)
     return dict(final_state)
 
@@ -176,6 +181,16 @@ def _parser() -> argparse.ArgumentParser:
         help="Optional TRACE ISIN override. If omitted, ISINs are harvested from the 10-K.",
     )
     parser.add_argument(
+        "--openai-api-key",
+        default=None,
+        help="OpenAI key for this run. Overrides OPENAI_API_KEY. Prefer .env or the GUI.",
+    )
+    parser.add_argument(
+        "--openai-model",
+        default=None,
+        help="OpenAI chat model (default: gpt-4o-mini, or OPENAI_MODEL).",
+    )
+    parser.add_argument(
         "--log-level",
         choices=("DEBUG", "INFO", "WARNING", "ERROR"),
         default="INFO",
@@ -195,6 +210,8 @@ def main() -> int:
             target_year=args.target_year,
             peer_tickers=args.peers,
             target_bonds=args.target_bonds,
+            openai_api_key=args.openai_api_key,
+            openai_model=args.openai_model,
         )
         print_summary(args.ticker, result)
         return 0

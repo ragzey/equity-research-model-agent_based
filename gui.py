@@ -26,7 +26,7 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 from main import run_pipeline  # noqa: E402
 from equity_research.tools.report_pack import build_report_pack  # noqa: E402
-from equity_research.tools.report_pack import build_report_pack  # noqa: E402
+from equity_research.utils.llm_client import redact_secrets  # noqa: E402
 
 REPORTS_DIR = PROJECT_ROOT / "outputs" / "reports"
 TEMPLATE_DIR = PROJECT_ROOT / "gui_templates"
@@ -214,14 +214,22 @@ class _JobLogHandler(logging.Handler):
         self.setFormatter(logging.Formatter("%(asctime)s | %(name)s | %(message)s"))
 
     def emit(self, record: logging.LogRecord) -> None:
-        line = self.format(record)
+        line = redact_secrets(self.format(record))
         with JOB_LOCK:
             job = JOBS.get(self.job_id)
             if job is not None:
                 job["logs"].append(line)
 
 
-def _run_job(job_id: str, ticker: str, year: str, peers: List[str], bonds: List[str]) -> None:
+def _run_job(
+    job_id: str,
+    ticker: str,
+    year: str,
+    peers: List[str],
+    bonds: List[str],
+    openai_api_key: str,
+    openai_model: str,
+) -> None:
     handler = _JobLogHandler(job_id)
     root = logging.getLogger()
     root.addHandler(handler)
@@ -239,6 +247,8 @@ def _run_job(job_id: str, ticker: str, year: str, peers: List[str], bonds: List[
                 target_year=year,
                 peer_tickers=peers,
                 target_bonds=bonds,
+                openai_api_key=openai_api_key or None,
+                openai_model=openai_model or None,
             )
             summary = summarize_state(state)
             _write_sidecar(summary)
@@ -251,8 +261,8 @@ def _run_job(job_id: str, ticker: str, year: str, peers: List[str], bonds: List[
         logger.exception("GUI pipeline run failed.")
         with JOB_LOCK:
             JOBS[job_id]["status"] = "error"
-            JOBS[job_id]["error"] = str(exc)
-            JOBS[job_id]["trace"] = traceback.format_exc()
+            JOBS[job_id]["error"] = redact_secrets(str(exc))
+            JOBS[job_id]["trace"] = redact_secrets(traceback.format_exc())
     finally:
         root.removeHandler(handler)
 
@@ -286,6 +296,8 @@ def api_run():
     year = str(payload.get("target_year") or date.today().year).strip()
     peers = _parse_symbols(str(payload.get("peers") or ""))
     bonds = _parse_symbols(str(payload.get("bonds") or ""))
+    openai_api_key = str(payload.get("openai_api_key") or "").strip()
+    openai_model = str(payload.get("openai_model") or "").strip()
     if RUN_LOCK.locked():
         return jsonify({"error": "A run is already in progress."}), 409
     job_id = uuid.uuid4().hex[:10]
@@ -299,7 +311,7 @@ def api_run():
         }
     thread = threading.Thread(
         target=_run_job,
-        args=(job_id, ticker, year, peers, bonds),
+        args=(job_id, ticker, year, peers, bonds, openai_api_key, openai_model),
         daemon=True,
     )
     thread.start()
@@ -360,7 +372,7 @@ def api_file(name: str):
 def main() -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     print("Research desk GUI  http://127.0.0.1:5050")
-    print("Local only. Model output is not an investment recommendation.")
+    print("Paste an OpenAI API key in the form, or set OPENAI_API_KEY.")
     app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)
 
 

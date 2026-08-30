@@ -12,6 +12,7 @@ from equity_research.tools.peer_discovery import (
     rank_peer_candidates,
     score_peer,
 )
+from equity_research.utils.llm_client import LLMNotConfiguredError
 
 
 class PeerRankingTests(unittest.TestCase):
@@ -98,14 +99,21 @@ class PeerRankingTests(unittest.TestCase):
 
 
 class CompetitiveSelectionTests(unittest.TestCase):
-    def test_pinned_peers_are_not_replaced(self):
+    @patch("equity_research.agents.competitive.chat_json")
+    def test_pinned_peers_are_not_replaced(self, mock_chat):
+        mock_chat.return_value = {
+            "rationale": "Operator pinned off-price apparel comps."
+        }
         state = initial_state("TJX", "2026", competitor_tickers=["ROST", "BURL"])
         result = select_comparable_set(state)
         self.assertEqual(result["mode"], "pinned")
         self.assertEqual(result["selected"], ["ROST", "BURL"])
+        self.assertIn("off-price", result["rationale"])
+        mock_chat.assert_called_once()
 
-    @patch("equity_research.agents.competitive.llm_configured", return_value=False)
-    def test_auto_select_uses_ranked_harvest(self, _configured):
+    @patch("equity_research.agents.competitive.chat_json")
+    def test_auto_select_requires_llm_rationale(self, mock_chat):
+        mock_chat.side_effect = LLMNotConfiguredError("need key")
         state = initial_state("TJX", "2026")
         state["discovered_peers"] = {
             "candidates": [
@@ -131,14 +139,11 @@ class CompetitiveSelectionTests(unittest.TestCase):
                 "market_cap": 15_000_000_000,
             },
         }
-        result = select_comparable_set(state)
-        self.assertEqual(result["mode"], "deterministic")
-        self.assertEqual(set(result["selected"]), {"ROST", "BURL"})
-        self.assertIn("ROST", result["rationale"])
+        with self.assertRaises(LLMNotConfiguredError):
+            select_comparable_set(state)
 
     @patch("equity_research.agents.competitive.chat_json")
-    @patch("equity_research.agents.competitive.llm_configured", return_value=True)
-    def test_llm_picks_are_clipped_to_harvested_names(self, _configured, mock_chat):
+    def test_llm_picks_are_clipped_to_harvested_names(self, mock_chat):
         mock_chat.return_value = {
             "selected": ["ROST", "NOTREAL", "BURL"],
             "rejected": [{"ticker": "WMT", "reason": "Different industry."}],

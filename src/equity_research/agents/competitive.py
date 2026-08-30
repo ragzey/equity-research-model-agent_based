@@ -9,14 +9,18 @@ from typing import Any, Dict, List, Optional
 
 from ..graphs.desk import COMPETITIVE, REVIEWER, WRITER, make_message
 from ..graphs.state import EquityResearchState
-from ..prompts.desk import COMPETITIVE_PEER_SYSTEM, COMPETITIVE_PEER_USER
+from ..prompts.desk import (
+    COMPETITIVE_PEER_SYSTEM,
+    COMPETITIVE_PEER_USER,
+    COMPETITIVE_PINNED_USER,
+)
 from ..tools.peer_analysis import build_peer_comparison_matrix
 from ..tools.peer_discovery import (
     MAX_PEERS,
     apply_named_picks,
     rank_peer_candidates,
 )
-from ..utils.llm_client import chat_json, llm_configured
+from ..utils.llm_client import LLMCallError, chat_json
 from ..utils.llm_synthesis import synthesize_industry_outlook
 
 logger = logging.getLogger("CompetitiveAnalyst")
@@ -117,9 +121,7 @@ def _llm_peer_picks(
     sector: str,
     candidates: List[Dict[str, Any]],
     ranked: Dict[str, Any],
-) -> Optional[Dict[str, Any]]:
-    if not llm_configured() or not candidates:
-        return None
+) -> Dict[str, Any]:
     payload = chat_json(
         [
             {"role": "system", "content": COMPETITIVE_PEER_SYSTEM},
@@ -132,7 +134,7 @@ def _llm_peer_picks(
                     candidates_json=json.dumps(
                         {
                             "candidates": candidates,
-                            "deterministic_ranking": ranked.get("ranked") or [],
+                            "harvest_ranking": ranked.get("ranked") or [],
                         },
                         indent=2,
                         default=str,
@@ -141,20 +143,53 @@ def _llm_peer_picks(
             },
         ],
         timeout=60,
-    )
-    if not payload:
-        return None
+        required=True,
+    ) or {}
     selected = apply_named_picks(candidates, payload.get("selected") or [])
     if not selected:
-        return None
+        raise LLMCallError(
+            "Competitive analyst did not keep any tickers from the harvested candidate list."
+        )
     rejected = payload.get("rejected") or ranked.get("rejected") or []
-    rationale = str(payload.get("rationale") or "").strip() or ranked.get("rationale")
+    rationale = str(payload.get("rationale") or "").strip()
+    if not rationale:
+        raise LLMCallError("Competitive analyst did not return a peer-selection rationale.")
     return {
         "selected": selected,
         "rejected": rejected,
         "rationale": rationale,
         "mode": "llm",
     }
+
+
+def _llm_pinned_rationale(
+    target: str,
+    industry: str,
+    sector: str,
+    pinned: List[str],
+) -> str:
+    payload = chat_json(
+        [
+            {"role": "system", "content": COMPETITIVE_PEER_SYSTEM},
+            {
+                "role": "user",
+                "content": COMPETITIVE_PINNED_USER.format(
+                    ticker=target,
+                    industry=industry or "n/a",
+                    sector=sector or "n/a",
+                    peers_json=json.dumps({"pinned": pinned}, indent=2),
+                ),
+            },
+        ],
+        timeout=60,
+        required=True,
+    ) or {}
+    rationale = str(payload.get("rationale") or "").strip()
+    if not rationale:
+        raise LLMCallError(
+            "Competitive analyst did not return a rationale for the pinned peer set."
+        )
+    return rationale
 
 
 def select_comparable_set(state: EquityResearchState) -> Dict[str, Any]:
@@ -167,28 +202,23 @@ def select_comparable_set(state: EquityResearchState) -> Dict[str, Any]:
     ]
     metadata = state.get("peer_metadata") or {}
     target_meta = metadata.get(target) or state.get("market_info") or {}
+    industry = str(target_meta.get("industry") or "")
+    sector = str(target_meta.get("sector") or "")
     if pinned:
+        selected = pinned[:MAX_PEERS]
         return {
-            "selected": pinned[:MAX_PEERS],
+            "selected": selected,
             "rejected": [],
-            "rationale": (
-                "Operator pinned this peer set. Competitive used it as given and "
-                "did not replace the names."
-            ),
+            "rationale": _llm_pinned_rationale(target, industry, sector, selected),
             "mode": "pinned",
         }
 
     discovered = state.get("discovered_peers") or {}
     candidates = discovered.get("candidates") or []
     ranked = rank_peer_candidates(target, candidates, metadata)
-    llm_choice = _llm_peer_picks(
-        target,
-        str(target_meta.get("industry") or ""),
-        str(target_meta.get("sector") or ""),
-        candidates,
-        ranked,
-    )
-    return llm_choice or ranked
+    if not candidates:
+        return ranked
+    return _llm_peer_picks(target, industry, sector, candidates, ranked)
 
 
 def competitive_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
@@ -203,7 +233,7 @@ def competitive_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         "selected": competitors,
         "rejected": selection.get("rejected") or [],
         "rationale": selection.get("rationale") or "",
-        "mode": selection.get("mode") or "deterministic",
+        "mode": selection.get("mode") or "llm",
         "sources_used": (state.get("discovered_peers") or {}).get("sources_used") or [],
     }
 

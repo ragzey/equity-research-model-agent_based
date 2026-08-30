@@ -42,8 +42,8 @@ class QualToQuantTests(unittest.TestCase):
         years, _ = evaluate_growth_horizon("The market faces price erosion.", 5)
         self.assertEqual(years, 3)
 
-    @patch("equity_research.agents.reviewer.llm_configured", return_value=False)
-    def test_reviewer_builds_auditable_overrides(self, _configured):
+    @patch("equity_research.agents.reviewer.chat_json")
+    def test_reviewer_builds_auditable_overrides(self, mock_chat):
         state = initial_state("TARGET", "2025", competitor_tickers=["PEER1", "PEER2"])
         state.update(
             {
@@ -68,6 +68,20 @@ class QualToQuantTests(unittest.TestCase):
                 "industry_outlook": "The market faces price erosion.",
             }
         )
+        mock_chat.return_value = {
+            "decisions": [
+                {"key": "terminal_margin", "action": "accept", "reason": "ok"},
+                {
+                    "key": "company_specific_risk_premium",
+                    "action": "accept",
+                    "reason": "litigation",
+                },
+                {"key": "high_growth_years", "action": "accept", "reason": "ok"},
+                {"key": "high_growth_rate", "action": "accept", "reason": "ok"},
+            ],
+            "notes_to_quant": "Use the bounded candidates.",
+            "notes_to_writer": "Disclose CSRP.",
+        }
         result = valuation_assumption_reviewer_node(state)["dcf_overrides"]
         self.assertEqual(result["company_specific_risk_premium"], 0.0075)
         self.assertIn("rationales", result)

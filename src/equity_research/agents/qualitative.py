@@ -10,7 +10,7 @@ from ..graphs.desk import QUALITATIVE, REVIEWER, WRITER, make_message
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import QUALITATIVE_SYSTEM
 from ..tools.sec_api import fetch_latest_10k_sections
-from ..utils.llm_client import chat_text
+from ..utils.llm_client import LLMCallError, chat_text
 
 logger = logging.getLogger("QualitativeAnalyst")
 RISK_TERMS = (
@@ -209,6 +209,7 @@ ITEM 7 - MD&A:
             {"role": "user", "content": user_prompt},
         ],
         timeout=90,
+        required=True,
     )
 
 
@@ -232,14 +233,9 @@ def qualitative_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         len(item_7),
     )
 
-    summary: Optional[str] = None
-    if item_1a or item_7:
-        try:
-            summary = _llm_summary(ticker, item_1a, item_7)
-        except Exception:
-            logger.exception("LLM qualitative synthesis failed; using evidence-only fallback.")
+    summary = _llm_summary(ticker, item_1a or "", item_7 or "")
     if not summary:
-        summary = _deterministic_summary(ticker, item_1a, item_7)
+        raise LLMCallError("Qualitative analyst returned an empty filing assessment.")
 
     evidence = _structured_evidence(item_1a, item_7)
     business_risks = []

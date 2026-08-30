@@ -1,4 +1,4 @@
-"""Deterministic Markdown investment-memo compiler from the validated ledger."""
+"""Lead writer: frozen Python numbers plus LLM-synthesized narrative."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from ..graphs.state import EquityResearchState
 from ..prompts.desk import WRITER_SYSTEM, WRITER_USER
 from ..tools.pdf_memo import write_memo_pdf
 from ..tools.report_pack import build_report_pack
-from ..utils.llm_client import chat_json, llm_configured
+from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("LeadWriter")
 
@@ -314,7 +314,7 @@ FCFF. Banks, insurers, brokers, and other financial firms are out of scope.
 
 def _desk_section(state: EquityResearchState) -> str:
     decisions = (state.get("dcf_overrides") or {}).get("decisions") or []
-    mode = (state.get("dcf_overrides") or {}).get("desk_mode") or "deterministic"
+    mode = (state.get("dcf_overrides") or {}).get("desk_mode") or "llm"
     decision_lines = (
         "\n".join(
             f"- **{row.get('key')}:** {row.get('action')} — {row.get('reason')}"
@@ -340,12 +340,6 @@ def _desk_section(state: EquityResearchState) -> str:
 def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -> Dict[str, str]:
     industry = state.get("industry_outlook") or "Industry outlook unavailable."
     qualitative = state.get("qualitative_analysis_summary") or "Qualitative assessment unavailable."
-    if not llm_configured():
-        return {
-            "industry_outlook": industry,
-            "qualitative_narrative": qualitative,
-            "desk_synthesis": "",
-        }
     payload = chat_json(
         [
             {"role": "system", "content": WRITER_SYSTEM},
@@ -366,19 +360,17 @@ def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -
             },
         ],
         timeout=90,
-    )
-    if not payload:
-        return {
-            "industry_outlook": industry,
-            "qualitative_narrative": qualitative,
-            "desk_synthesis": "",
-        }
+        required=True,
+    ) or {}
+    desk_synthesis = str(payload.get("desk_synthesis") or "").strip()
+    if not desk_synthesis:
+        raise LLMCallError("Lead writer did not return a desk synthesis.")
     return {
         "industry_outlook": str(payload.get("industry_outlook") or industry),
         "qualitative_narrative": str(
             payload.get("qualitative_narrative") or qualitative
         ),
-        "desk_synthesis": str(payload.get("desk_synthesis") or "").strip(),
+        "desk_synthesis": desk_synthesis,
     }
 
 
@@ -437,7 +429,7 @@ def _write_gui_sidecar(
 
 
 def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
-    """Write a sourced, deterministic Markdown research note and return its path."""
+    """Write a sourced Markdown research note from frozen numbers and LLM narrative."""
     ticker = state["ticker"].strip().upper()
     summary = dict(state.get("valuation_summary") or {})
     inputs = summary.get("valuation_date_inputs") or {}

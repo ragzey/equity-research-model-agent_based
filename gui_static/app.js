@@ -5,6 +5,10 @@ const empty = document.querySelector("#empty");
 const workspace = document.querySelector("#workspace");
 const logEl = document.querySelector("#log");
 
+const KEY_STORE = "equityDesk.openaiKey";
+const MODEL_STORE = "equityDesk.openaiModel";
+let envHasOpenAI = false;
+
 function $(id) {
   return document.querySelector(id);
 }
@@ -81,11 +85,22 @@ async function loadMeta() {
   const response = await fetch("/api/meta");
   const data = await response.json();
   const env = data.env || {};
+  envHasOpenAI = Boolean(env.openai);
   $("#env").innerHTML = `
-    <dt>OpenAI</dt><dd>${env.openai ? "on" : "off — deterministic desk"}</dd>
+    <dt>OpenAI</dt><dd>${env.openai ? "key in .env" : "paste a key to run"}</dd>
     <dt>Finnhub</dt><dd>${env.finnhub ? "on" : "off — Damodaran Kd"}</dd>
     <dt>SEC UA</dt><dd>${env.sec_user_agent_ok ? "set" : "placeholder"}</dd>
   `;
+  const storedKey = sessionStorage.getItem(KEY_STORE);
+  const storedModel = sessionStorage.getItem(MODEL_STORE);
+  if (storedKey && !$("#openai-key").value) {
+    $("#openai-key").value = storedKey;
+  }
+  if (storedModel && !$("#openai-model").value) {
+    $("#openai-model").value = storedModel;
+  } else if (!storedModel && !$("#openai-model").value) {
+    $("#openai-model").value = "gpt-4o-mini";
+  }
   const recent = $("#recent");
   recent.innerHTML = "";
   (data.reports || []).forEach((item) => {
@@ -324,6 +339,21 @@ async function pollJob(jobId) {
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
+  const openaiKey = $("#openai-key").value.trim();
+  const openaiModel = $("#openai-model").value.trim();
+  if (!openaiKey && !envHasOpenAI) {
+    showError(
+      "Paste an OpenAI API key. Competitive, Qualitative, the reviewer, and the writer must call the model."
+    );
+    setState("Idle");
+    return;
+  }
+  if (openaiKey) {
+    sessionStorage.setItem(KEY_STORE, openaiKey);
+  }
+  if (openaiModel) {
+    sessionStorage.setItem(MODEL_STORE, openaiModel);
+  }
   runBtn.disabled = true;
   empty.hidden = true;
   workspace.hidden = false;
@@ -338,6 +368,8 @@ form.addEventListener("submit", async (event) => {
       target_year: $("#year").value,
       peers: $("#peers").value,
       bonds: $("#bonds").value,
+      openai_api_key: openaiKey,
+      openai_model: openaiModel,
     }),
   });
   const data = await response.json();

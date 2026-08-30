@@ -12,7 +12,7 @@ from equity_research.agents.reviewer import valuation_assumption_reviewer_node
 from equity_research.graphs.defaults import initial_state
 from equity_research.graphs.desk import apply_override_decisions, format_transcript
 from equity_research.graphs.graph import build_research_graph
-from equity_research.utils.llm_client import parse_json_object
+from equity_research.utils.llm_client import LLMNotConfiguredError, parse_json_object
 
 
 SMALL_CAP_MATRIX = {
@@ -112,19 +112,14 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertIn("positioning_claim", kinds)
         self.assertIn("assumption_reviewer", format_transcript(comp))
 
-    @patch("equity_research.agents.reviewer.llm_configured", return_value=False)
-    def test_reviewer_auto_accepts_without_llm(self, _configured):
-        result = valuation_assumption_reviewer_node(_review_state())
-        overrides = result["dcf_overrides"]
-        self.assertEqual(overrides["desk_mode"], "deterministic")
-        self.assertGreater(overrides["terminal_margin"], 0.12)
-        self.assertEqual(overrides["company_specific_risk_premium"], 0.0075)
-        targets = {item["to_agent"] for item in result["agent_messages"]}
-        self.assertEqual(targets, {"quant_analyst", "lead_writer"})
+    @patch("equity_research.agents.reviewer.chat_json")
+    def test_reviewer_requires_llm_decisions(self, mock_chat):
+        mock_chat.side_effect = LLMNotConfiguredError("need key")
+        with self.assertRaises(LLMNotConfiguredError):
+            valuation_assumption_reviewer_node(_review_state())
 
     @patch("equity_research.agents.reviewer.chat_json")
-    @patch("equity_research.agents.reviewer.llm_configured", return_value=True)
-    def test_reviewer_llm_can_reject_terminal_margin_lift(self, _configured, mock_chat):
+    def test_reviewer_llm_can_reject_terminal_margin_lift(self, mock_chat):
         mock_chat.return_value = {
             "decisions": [
                 {
@@ -149,6 +144,8 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertAlmostEqual(overrides["terminal_margin"], 0.12)
         self.assertEqual(overrides["company_specific_risk_premium"], 0.0075)
         mock_chat.assert_called_once()
+        kwargs = mock_chat.call_args.kwargs
+        self.assertTrue(kwargs.get("required"))
 
     def test_graph_still_compiles(self):
         graph = build_research_graph()

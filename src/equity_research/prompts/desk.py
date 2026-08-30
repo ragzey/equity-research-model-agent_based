@@ -120,3 +120,16 @@ Return JSON only:
   "rationale": "one short paragraph the memo can quote"
 }}
 """
+
+COMPETITIVE_PINNED_USER = """Target: {ticker}
+Industry: {industry}
+Sector: {sector}
+
+The operator pinned this comparable set. You may not replace or add names:
+{peers_json}
+
+Reason about whether these are close operating comps. Return JSON only:
+{{
+  "rationale": "one short paragraph the memo can quote"
+}}
+"""
