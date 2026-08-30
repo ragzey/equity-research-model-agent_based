@@ -109,7 +109,7 @@ def _first_number(row: Dict[str, Any], labels: Sequence[str]) -> Optional[float]
     return None
 
 
-def extract_debt_and_cash(balance_sheet: Dict[Any, Any]) -> tuple[float, float]:
+def extract_debt_and_cash(balance_sheet: Dict[Any, Any]) -> tuple[float, float, bool]:
     """Extract latest total debt and cash from either supported statement shape."""
     row = _latest_balance_row(balance_sheet)
     total_debt = _first_number(row, DEBT_LABELS)
@@ -118,10 +118,11 @@ def extract_debt_and_cash(balance_sheet: Dict[Any, Any]) -> tuple[float, float]:
         long_term = _first_number(row, LONG_DEBT_LABELS) or 0.0
         total_debt = current + long_term
     cash = _first_number(row, CASH_LABELS)
-    if cash is None:
+    cash_missing = cash is None
+    if cash_missing:
         cash = 0.0
         logger.warning("Cash field unavailable; using zero and flagging this in summary.")
-    return max(total_debt, 0.0), max(cash, 0.0)
+    return max(total_debt, 0.0), max(cash, 0.0), cash_missing
 
 
 def _no_debt_result(risk_free_rate: float) -> Dict[str, Any]:
@@ -198,7 +199,7 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         raise ValueError("Reviewed high-growth rate must be between 0% and 40%.")
 
     base_revenue, base_ebit = extract_operating_baseline(income_statement)
-    total_debt, cash = extract_debt_and_cash(balance_sheet)
+    total_debt, cash, cash_missing = extract_debt_and_cash(balance_sheet)
     ebit, interest_expense = extract_ebit_and_interest(income_statement)
     outstanding_bonds = state.get("outstanding_bonds") or []
 
@@ -268,6 +269,7 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
                 "company_specific_risk_premium": company_risk_premium,
                 "total_debt": total_debt,
                 "cash_and_equivalents": cash,
+                "cash_field_missing": cash_missing,
                 "indicated_dividend": info.get("dividendRate")
                 or info.get("trailingAnnualDividendRate"),
                 "fifty_two_week_low": info.get("fiftyTwoWeekLow"),

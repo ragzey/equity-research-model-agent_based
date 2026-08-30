@@ -55,6 +55,7 @@ function showError(message) {
   $("#charts").innerHTML = "";
   $("#panel-memo").innerHTML = "";
   $("#panel-assumptions").innerHTML = "";
+  $("#panel-sources").innerHTML = "";
   $("#panel-desk").innerHTML = "";
 }
 
@@ -160,6 +161,43 @@ function renderCharts(pack) {
   });
 }
 
+function renderSources(pack) {
+  const rows = pack.sources || [];
+  if (!rows.length) {
+    $("#panel-sources").innerHTML = "<p class='hint'>No source register on this note.</p>";
+    return;
+  }
+  const body = rows
+    .map((row) => {
+      const url = String(row.url || "").trim();
+      const source = url
+        ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.source || url)}</a>`
+        : escapeHtml(row.source || "");
+      return `
+      <tr>
+        <td>${escapeHtml(row.item || "")}</td>
+        <td>${escapeHtml(row.detail || "")}</td>
+        <td>${source}</td>
+        <td>${escapeHtml(row.used_for || "")}</td>
+      </tr>`;
+    })
+    .join("");
+  $("#panel-sources").innerHTML = `
+    <table class="assumptions">
+      <thead>
+        <tr>
+          <th>Input</th>
+          <th>What was used</th>
+          <th>Source</th>
+          <th>Used for</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p class="chart-note">Ledger citations only. The desk does not invent URLs or references.</p>
+  `;
+}
+
 function renderAssumptions(pack) {
   const rows = pack.assumptions || [];
   if (!rows.length) {
@@ -255,6 +293,7 @@ function renderSummary(summary) {
 
   renderCharts(pack);
   renderAssumptions(pack);
+  renderSources(pack);
 
   const downloads = [];
   if (summary.memo_name) {

@@ -9,7 +9,7 @@ from typing import Any, Dict, Iterable, List, Optional
 from ..graphs.desk import QUALITATIVE, REVIEWER, WRITER, make_message
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import QUALITATIVE_SYSTEM
-from ..tools.sec_api import fetch_latest_10k_sections
+from ..tools.sec_api import fetch_latest_10k_sections, sourced_filing_payload
 from ..utils.llm_client import LLMCallError, chat_text
 
 logger = logging.getLogger("QualitativeAnalyst")
@@ -216,15 +216,24 @@ ITEM 7 - MD&A:
 def qualitative_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     """Return a sourced qualitative summary as a partial LangGraph state update."""
     ticker = state["ticker"].strip().upper()
-    chunks = state.get("sec_filing_chunks") or []
-    item_1a = chunks[0] if chunks else ""
-    item_7 = chunks[1] if len(chunks) > 1 else ""
+    labeled = state.get("sec_filing_sections") or {}
+    item_1a = str(labeled.get("item_1a") or "")
+    item_7 = str(labeled.get("item_7") or "")
+    filing_update: Dict[str, Any] = {}
+
+    if not item_1a and not item_7:
+        chunks = state.get("sec_filing_chunks") or []
+        if len(chunks) >= 2:
+            item_1a = str(chunks[0] or "")
+            item_7 = str(chunks[1] or "")
 
     if not item_1a and not item_7:
         sections = fetch_latest_10k_sections(ticker)
         if sections:
-            item_1a = sections.get("item_1a") or ""
-            item_7 = sections.get("item_7") or ""
+            filing_update = sourced_filing_payload(sections)
+            labeled = filing_update.get("sec_filing_sections") or {}
+            item_1a = str(labeled.get("item_1a") or "")
+            item_7 = str(labeled.get("item_7") or "")
 
     logger.info(
         "Qualitative source for %s | Item 1A: %d chars | Item 7: %d chars",
@@ -247,6 +256,7 @@ def qualitative_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
                 seen_risks.add(tag)
 
     return {
+        **filing_update,
         "qualitative_analysis_summary": summary,
         "qualitative_evidence": evidence,
         "business_risks": business_risks or None,

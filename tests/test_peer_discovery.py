@@ -9,6 +9,7 @@ from equity_research.agents.competitive import select_comparable_set
 from equity_research.graphs.defaults import initial_state
 from equity_research.tools.peer_discovery import (
     apply_named_picks,
+    clip_rejected_picks,
     rank_peer_candidates,
     score_peer,
 )
@@ -65,6 +66,18 @@ class PeerRankingTests(unittest.TestCase):
             apply_named_picks(candidates, ["ROST", "FAKE", "SPY", "BURL"]),
             ["ROST", "BURL"],
         )
+
+    def test_rejected_picks_cannot_invent_a_ticker(self):
+        candidates = [{"ticker": "ROST"}, {"ticker": "BURL"}]
+        clipped = clip_rejected_picks(
+            candidates,
+            [
+                {"ticker": "ROST", "reason": "too close"},
+                {"ticker": "NOTREAL", "reason": "invented"},
+                "SPY",
+            ],
+        )
+        self.assertEqual(clipped, [{"ticker": "ROST", "reason": "too close"}])
 
     def test_score_prefers_industry_match(self):
         target = {"industry": "Apparel Retail", "sector": "Consumer Cyclical"}

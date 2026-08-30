@@ -189,6 +189,30 @@ class ReportPackIntegrationTests(unittest.TestCase):
         self.assertIn("Blend of history and consensus", growth_row["justification"])
         self.assertEqual(pack["model_rating"], "Hold")
 
+    def test_pack_includes_ledger_sources(self):
+        pack = build_report_pack(
+            self._state(
+                sec_filing_metadata={
+                    "filing_url": "https://www.sec.gov/Archives/test.htm",
+                    "filing_date": "2025-01-15",
+                    "accession_number": "0000000000-25-000001",
+                },
+                sec_filing_sections={"item_1a": "Risk factors.", "item_7": "MD&A."},
+                peer_selection={
+                    "selected": ["PEER"],
+                    "mode": "llm",
+                    "sources_used": ["yahoo_recommendations"],
+                    "rejected": [],
+                },
+            )
+        )
+        items = {row["item"] for row in pack["sources"]}
+        self.assertIn("SEC 10-K", items)
+        self.assertIn("Valuation math", items)
+        sec = next(row for row in pack["sources"] if row["item"] == "SEC 10-K")
+        self.assertEqual(sec["url"], "https://www.sec.gov/Archives/test.htm")
+        self.assertTrue(any("Yahoo Finance" in row["source"] for row in pack["sources"]))
+
     def test_no_peers_uses_full_dcf_weight(self):
         state = self._state()
         state["peer_comparison_matrix"] = {

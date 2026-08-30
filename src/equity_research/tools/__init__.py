@@ -19,14 +19,17 @@ from .sec_api import (
     fetch_latest_10k_text,
     fetch_sec_section,
     get_cik_for_ticker,
+    sourced_filing_payload,
 )
 from .peer_discovery import (
     apply_named_picks,
+    clip_rejected_picks,
     discover_peer_candidates,
     rank_peer_candidates,
 )
 from .price_history import fetch_rebased_price_history
 from .report_pack import build_report_pack
+from .source_register import build_source_register
 from .valuation import (
     build_dcf_sensitivity_grid,
     calculate_wacc,
@@ -50,8 +53,11 @@ __all__ = [
     "discover_peer_candidates",
     "rank_peer_candidates",
     "apply_named_picks",
+    "clip_rejected_picks",
     "fetch_sec_section",
+    "sourced_filing_payload",
     "build_report_pack",
+    "build_source_register",
     "generate_valuation_overrides",
     "get_cik_for_ticker",
     "get_outstanding_bonds_for_ticker",

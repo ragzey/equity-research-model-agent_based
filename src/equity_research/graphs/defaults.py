@@ -22,6 +22,7 @@ def initial_state(
         cash_flow_statement=None,
         recent_news=None,
         sec_filing_chunks=None,
+        sec_filing_sections=None,
         sec_filing_metadata=None,
         outstanding_bonds=None,
         peer_metadata=None,

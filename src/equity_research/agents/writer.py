@@ -13,6 +13,7 @@ from ..graphs.state import EquityResearchState
 from ..prompts.desk import WRITER_SYSTEM, WRITER_USER
 from ..tools.pdf_memo import write_memo_pdf
 from ..tools.report_pack import build_report_pack
+from ..tools.source_register import sources_markdown
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("LeadWriter")
@@ -593,6 +594,12 @@ Value is most sensitive to WACC and terminal growth (grid below). A higher beta,
 - The 12-month price target rolls today's fair value forward at the cost of equity; it is not a catalyst or timing forecast.
 - The FCFF framework is not used for financial-services firms.
 - The model band is not an independently verified Buy/Hold/Sell recommendation.
+
+## Sources and references
+
+Inputs actually used on this run. URLs appear only when the ledger stored them; none are invented.
+
+{sources_markdown(pack.get("sources"))}
 """
 
     project_root = Path(__file__).resolve().parents[3]

@@ -69,13 +69,13 @@ def _propose_overrides(state: EquityResearchState) -> Dict[str, Any]:
     filing_evidence = state.get("qualitative_evidence") or []
     qualitative_risk_input = " ".join(
         item.get("excerpt", "") for item in filing_evidence
-    ) or state.get("qualitative_analysis_summary")
+    )
 
     overrides = generate_valuation_overrides(
         target_margin=target_margin,
         peer_comparison_matrix=peer_matrix,
         qualitative_summary=qualitative_risk_input,
-        industry_outlook=state.get("industry_outlook"),
+        industry_outlook=None,
         default_terminal_margin=baseline["terminal_margin"],
         default_high_growth_years=baseline["high_growth_years"],
     )

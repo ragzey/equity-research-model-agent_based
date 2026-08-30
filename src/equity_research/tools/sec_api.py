@@ -210,6 +210,24 @@ def fetch_latest_10k_sections(
     return {**filing, "item_1a": item_1a, "item_7": item_7, "item_8": item_8}
 
 
+def sourced_filing_payload(sections: Dict[str, Any]) -> Dict[str, Any]:
+    """Labeled Item 1A / Item 7 plus filing URL metadata. Never drop a missing section."""
+    item_1a = str(sections.get("item_1a") or "")[:MAX_SECTION_CHARS]
+    item_7 = str(sections.get("item_7") or "")[:MAX_SECTION_CHARS]
+    metadata = {
+        key: str(sections[key])
+        for key in ("filing_url", "filing_date", "accession_number")
+        if sections.get(key)
+    }
+    payload: Dict[str, Any] = {}
+    if item_1a or item_7:
+        payload["sec_filing_sections"] = {"item_1a": item_1a, "item_7": item_7}
+        payload["sec_filing_chunks"] = [item_1a, item_7]
+    if metadata:
+        payload["sec_filing_metadata"] = metadata
+    return payload
+
+
 def fetch_sec_section(ticker: str, section_id: str) -> Optional[str]:
     """Compatibility helper for callers that need one named section."""
     sections = fetch_latest_10k_sections(ticker)

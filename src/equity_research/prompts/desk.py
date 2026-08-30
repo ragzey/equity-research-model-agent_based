@@ -61,6 +61,8 @@ use them as given. If a narrative conflicts with a frozen fact, keep the frozen 
 You may quote the frozen model_rating, fair_value, and price_target_12m exactly.
 Treat the rating as a model-implied band, not advice. Do not invent a different rating
 or a different price target.
+Do not invent sources, URLs, accession numbers, or citations. The memo's Sources
+section is built from the ledger, not from this narrative.
 """
 
 WRITER_USER = """Ticker: {ticker}

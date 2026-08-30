@@ -119,12 +119,13 @@ def assess_qualitative_risks(
     base_equity_risk_premium: float = 0.05,
 ) -> Tuple[float, float, str]:
     """
-    Convert explicit risk phrases into a bounded company-specific premium.
+    Convert explicit risk phrases from **filing excerpts** into a bounded
+    company-specific premium. LLM industry outlook is not scanned here.
 
     The premium is added directly to cost of equity; it is not multiplied by
     beta as it would be if incorrectly embedded inside the market ERP.
     """
-    text = f"{qualitative_summary or ''} {industry_outlook or ''}".lower()
+    text = (qualitative_summary or "").lower()
     regulatory = sorted({signal for signal in REGULATORY_SIGNALS if signal in text})
     operational = sorted({signal for signal in OPERATIONAL_SIGNALS if signal in text})
 
@@ -150,14 +151,14 @@ def assess_qualitative_risks(
 
 
 def evaluate_growth_horizon(
-    industry_outlook: Optional[str] = None,
+    source_text: Optional[str] = None,
     default_high_growth_years: int = 5,
 ) -> Tuple[int, str]:
-    """Compress, but never extend, the classifier's growth horizon on headwinds."""
+    """Compress, but never extend, the classifier's growth horizon on filing headwinds."""
     years = int(default_high_growth_years)
-    if not industry_outlook:
-        return years, "No industry outlook; retained classifier growth horizon."
-    text = industry_outlook.lower()
+    if not source_text:
+        return years, "No filing saturation evidence; retained classifier growth horizon."
+    text = source_text.lower()
     signals = sorted({signal for signal in SATURATION_SIGNALS if signal in text})
     if not signals:
         return years, "No configured saturation phrases matched; retained growth horizon."
@@ -191,7 +192,7 @@ def generate_valuation_overrides(
         base_equity_risk_premium,
     )
     high_growth_years, horizon_rationale = evaluate_growth_horizon(
-        industry_outlook,
+        qualitative_summary,
         default_high_growth_years,
     )
     return {

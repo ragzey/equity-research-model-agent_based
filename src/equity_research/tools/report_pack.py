@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from .source_register import build_source_register
+
 # Same 70/30 split as a standard initiation that treats DCF as primary
 # and peer EV/EBITDA as the market cross-check.
 DCF_WEIGHT = 0.70
@@ -628,6 +630,7 @@ def build_report_pack(state: Dict[str, Any]) -> Dict[str, Any]:
         ke=ke,
         indicated_dividend=dividend,
     )
+    pack["sources"] = build_source_register(state)
     pack["key_data"] = _key_data_rows(pack)
     pack["valuation_points"] = _valuation_points(pack)
     return pack

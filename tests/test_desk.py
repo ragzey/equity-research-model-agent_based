@@ -48,6 +48,12 @@ def _review_state():
                 }
             },
             "qualitative_analysis_summary": "Material litigation is ongoing.",
+            "qualitative_evidence": [
+                {
+                    "section": "Item 1A",
+                    "excerpt": "The company faces material litigation.",
+                }
+            ],
             "industry_outlook": "The market faces price erosion.",
             "agent_messages": _competitive_handoffs(
                 "TARGET",
@@ -87,7 +93,10 @@ class DeskProtocolTests(unittest.TestCase):
                     "action": "reject",
                     "reason": "Margin is not a moat.",
                     "value": 0.99,
-                }
+                },
+                {"key": "company_specific_risk_premium", "action": "accept", "reason": "ok"},
+                {"key": "high_growth_years", "action": "accept", "reason": "ok"},
+                {"key": "high_growth_rate", "action": "accept", "reason": "ok"},
             ],
             mode="llm",
         )
@@ -95,6 +104,27 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertEqual(applied["company_specific_risk_premium"], 0.0075)
         self.assertEqual(applied["desk_mode"], "llm")
         self.assertIn("REJECTED", applied["rationales"]["terminal_margin"])
+
+    def test_missing_reviewer_action_reverts_to_baseline(self):
+        proposed = {
+            "terminal_margin": 0.15,
+            "company_specific_risk_premium": 0.0075,
+            "high_growth_years": 2,
+            "high_growth_rate": 0.08,
+            "rationales": {},
+        }
+        baseline = {
+            "terminal_margin": 0.12,
+            "company_specific_risk_premium": 0.0,
+            "high_growth_years": 3,
+            "high_growth_rate": 0.05,
+        }
+        applied = apply_override_decisions(proposed, baseline, [], mode="llm")
+        self.assertAlmostEqual(applied["terminal_margin"], 0.12)
+        self.assertEqual(applied["company_specific_risk_premium"], 0.0)
+        self.assertEqual(applied["high_growth_years"], 3)
+        self.assertAlmostEqual(applied["high_growth_rate"], 0.05)
+        self.assertTrue(all(row["action"] == "reject" for row in applied["decisions"]))
 
     def test_qualitative_and_competitive_post_handoffs(self):
         qual = _qualitative_handoffs(

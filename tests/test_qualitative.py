@@ -9,7 +9,7 @@ from equity_research.agents.valuation_router import (
 )
 from equity_research.graphs.defaults import initial_state
 from equity_research.graphs.graph import graph
-from equity_research.tools.sec_api import extract_sec_section
+from equity_research.tools.sec_api import extract_sec_section, sourced_filing_payload
 
 
 class QualitativeTests(unittest.TestCase):
@@ -56,6 +56,24 @@ class QualitativeTests(unittest.TestCase):
             "",
         )
         self.assertIn("[Item 1A]", summary)
+
+    def test_missing_item_1a_does_not_relabel_item_7(self):
+        payload = sourced_filing_payload(
+            {
+                "item_1a": "",
+                "item_7": "Management discussion of results.",
+                "filing_url": "https://www.sec.gov/Archives/example.htm",
+                "filing_date": "2025-03-01",
+                "accession_number": "0001",
+            }
+        )
+        self.assertEqual(payload["sec_filing_chunks"][0], "")
+        self.assertIn("Management discussion", payload["sec_filing_chunks"][1])
+        self.assertEqual(payload["sec_filing_sections"]["item_1a"], "")
+        self.assertEqual(
+            payload["sec_filing_metadata"]["filing_url"],
+            "https://www.sec.gov/Archives/example.htm",
+        )
 
     def test_graph_contains_current_nodes(self):
         node_names = set(graph.get_graph().nodes)

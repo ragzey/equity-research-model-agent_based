@@ -81,8 +81,13 @@ def apply_override_decisions(
     audit: List[Dict[str, Any]] = []
     for key in DECISION_KEYS:
         decision = by_key.get(key) or {}
-        action = str(decision.get("action") or "accept").strip().lower()
+        action = str(decision.get("action") or "").strip().lower()
         reason = str(decision.get("reason") or "").strip()
+        if action not in {"accept", "reject"}:
+            action = "reject"
+            reason = reason or (
+                "Missing or invalid reviewer action; reverted to baseline."
+            )
         if action == "reject":
             applied[key] = revert_value(key, baseline)
             prior = rationales.get(key, "")

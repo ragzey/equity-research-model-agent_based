@@ -27,10 +27,11 @@ class EquityResearchState(TypedDict):
     discovered_bond_isins: Optional[List[str]]  # 10-K harvested ISIN candidates
     discovered_peers: Optional[Dict[str, Any]]  # Yahoo/Finnhub similar-stock harvest
     price_history: Optional[Dict[str, Any]]  # Indexed 12-month closes vs market
+    sec_filing_sections: Optional[Dict[str, str]]  # Labeled item_1a / item_7 text
     is_financial: bool
     valuation_method: Optional[str]  # corporate_fcff or unsupported_financial
 
-    # 3. Model Calculations (Calculated by the Quant Analyst via Python REPL)
+    # 3. Model Calculations (Quant: Python WACC + three-stage FCFF)
     discount_rate: Optional[float]  # Calculated or assumed WACC
     calculated_dcf_value: Optional[float]  # Intrinsic value per share
     valuation_summary: Optional[Dict[str, Any]]  # Key financial metrics & growth rates

@@ -18,6 +18,7 @@ from ..tools.peer_analysis import build_peer_comparison_matrix
 from ..tools.peer_discovery import (
     MAX_PEERS,
     apply_named_picks,
+    clip_rejected_picks,
     rank_peer_candidates,
 )
 from ..utils.llm_client import LLMCallError, chat_json
@@ -150,7 +151,9 @@ def _llm_peer_picks(
         raise LLMCallError(
             "Competitive analyst did not keep any tickers from the harvested candidate list."
         )
-    rejected = payload.get("rejected") or ranked.get("rejected") or []
+    rejected = clip_rejected_picks(candidates, payload.get("rejected"))
+    if not rejected:
+        rejected = ranked.get("rejected") or []
     rationale = str(payload.get("rationale") or "").strip()
     if not rationale:
         raise LLMCallError("Competitive analyst did not return a peer-selection rationale.")

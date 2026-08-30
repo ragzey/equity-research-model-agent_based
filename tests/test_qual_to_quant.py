@@ -10,6 +10,7 @@ from equity_research.tools.qual_to_quant import (
     analyze_competitive_moat,
     assess_qualitative_risks,
     evaluate_growth_horizon,
+    generate_valuation_overrides,
 )
 
 
@@ -42,6 +43,19 @@ class QualToQuantTests(unittest.TestCase):
         years, _ = evaluate_growth_horizon("The market faces price erosion.", 5)
         self.assertEqual(years, 3)
 
+    def test_llm_outlook_cannot_drive_horizon_or_csrp(self):
+        result = generate_valuation_overrides(
+            target_margin=0.15,
+            qualitative_summary="",
+            industry_outlook=(
+                "The market faces price erosion, secular decline, "
+                "and material litigation."
+            ),
+            default_high_growth_years=5,
+        )
+        self.assertEqual(result["high_growth_years"], 5)
+        self.assertEqual(result["company_specific_risk_premium"], 0.0)
+
     @patch("equity_research.agents.reviewer.chat_json")
     def test_reviewer_builds_auditable_overrides(self, mock_chat):
         state = initial_state("TARGET", "2025", competitor_tickers=["PEER1", "PEER2"])
@@ -65,6 +79,12 @@ class QualToQuantTests(unittest.TestCase):
                     }
                 },
                 "qualitative_analysis_summary": "Material litigation is ongoing.",
+                "qualitative_evidence": [
+                    {
+                        "section": "Item 1A",
+                        "excerpt": "The company faces material litigation.",
+                    }
+                ],
                 "industry_outlook": "The market faces price erosion.",
             }
         )

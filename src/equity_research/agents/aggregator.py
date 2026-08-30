@@ -11,7 +11,7 @@ from ..tools.firm_classifier import is_financial_services_firm
 from ..tools.market_api import fetch_financial_statements
 from ..tools.peer_discovery import discover_peer_candidates, hydrate_peer_metadata
 from ..tools.price_history import fetch_rebased_price_history
-from ..tools.sec_api import fetch_latest_10k_sections
+from ..tools.sec_api import fetch_latest_10k_sections, sourced_filing_payload
 
 logger = logging.getLogger("DataAggregator")
 
@@ -60,22 +60,11 @@ def aggregator_node(state: EquityResearchState) -> Dict[str, Any]:
     # 2. SEC 10-K excerpt for qualitative work (wrapped as list for state schema)
     filing_sections = fetch_latest_10k_sections(ticker)
     if filing_sections:
-        chunks = [
-            section[:50_000]
-            for section in (
-                filing_sections.get("item_1a"),
-                filing_sections.get("item_7"),
-            )
-            if section
-        ]
-        updates["sec_filing_chunks"] = chunks or None
-        updates["sec_filing_metadata"] = {
-            key: str(filing_sections[key])
-            for key in ("filing_url", "filing_date", "accession_number")
-            if filing_sections.get(key)
-        } or None
+        updates.update(sourced_filing_payload(filing_sections))
         logger.info(
-            "Saved %d sourced 10-K section(s) to sec_filing_chunks.", len(chunks)
+            "Saved sourced 10-K sections | Item 1A: %d chars | Item 7: %d chars",
+            len((updates.get("sec_filing_sections") or {}).get("item_1a") or ""),
+            len((updates.get("sec_filing_sections") or {}).get("item_7") or ""),
         )
     else:
         logger.warning("SEC 10-K excerpt unavailable for %s.", ticker)

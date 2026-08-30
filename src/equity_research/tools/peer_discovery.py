@@ -247,6 +247,28 @@ def apply_named_picks(
     return selected
 
 
+def clip_rejected_picks(
+    candidates: List[Dict[str, Any]],
+    rejected: Any,
+) -> List[Dict[str, str]]:
+    """Keep rejected-comp notes only for harvested tickers."""
+    allowed = {str(row.get("ticker") or "").upper() for row in candidates}
+    clipped: List[Dict[str, str]] = []
+    seen = set()
+    for raw in rejected or []:
+        if isinstance(raw, dict):
+            symbol = _clean_ticker(raw.get("ticker"))
+            reason = str(raw.get("reason") or "").strip()
+        else:
+            symbol = _clean_ticker(raw)
+            reason = ""
+        if not symbol or symbol not in allowed or symbol in seen:
+            continue
+        seen.add(symbol)
+        clipped.append({"ticker": symbol, "reason": reason})
+    return clipped
+
+
 def rank_peer_candidates(
     target: str,
     candidates: List[Dict[str, Any]],
