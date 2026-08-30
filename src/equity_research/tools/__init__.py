@@ -20,6 +20,13 @@ from .sec_api import (
     fetch_sec_section,
     get_cik_for_ticker,
 )
+from .peer_discovery import (
+    apply_named_picks,
+    discover_peer_candidates,
+    rank_peer_candidates,
+)
+from .price_history import fetch_rebased_price_history
+from .report_pack import build_report_pack
 from .valuation import (
     build_dcf_sensitivity_grid,
     calculate_wacc,
@@ -39,7 +46,12 @@ __all__ = [
     "fetch_latest_10k_text",
     "fetch_peer_metadata",
     "fetch_relative_valuation_metrics",
+    "fetch_rebased_price_history",
+    "discover_peer_candidates",
+    "rank_peer_candidates",
+    "apply_named_picks",
     "fetch_sec_section",
+    "build_report_pack",
     "generate_valuation_overrides",
     "get_cik_for_ticker",
     "get_outstanding_bonds_for_ticker",

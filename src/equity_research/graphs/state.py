@@ -25,6 +25,8 @@ class EquityResearchState(TypedDict):
     market_info: Optional[Dict[str, Any]]  # Yahoo .info snapshot for the target
     consensus_growth: Optional[Dict[str, Any]]  # Labeled Yahoo consensus overlay
     discovered_bond_isins: Optional[List[str]]  # 10-K harvested ISIN candidates
+    discovered_peers: Optional[Dict[str, Any]]  # Yahoo/Finnhub similar-stock harvest
+    price_history: Optional[Dict[str, Any]]  # Indexed 12-month closes vs market
     is_financial: bool
     valuation_method: Optional[str]  # corporate_fcff or unsupported_financial
 
@@ -39,6 +41,7 @@ class EquityResearchState(TypedDict):
     qualitative_analysis_summary: Optional[str]  # Reviewed SEC qualitative synthesis
     qualitative_evidence: Optional[List[Dict[str, str]]]  # Section-tagged filing quotes
     peer_comparison_matrix: Optional[Dict[str, Any]]  # Relative valuation vs peers
+    peer_selection: Optional[Dict[str, Any]]  # Competitive analyst keep/drop rationale
     industry_outlook: Optional[str]  # Industry headwinds, tailwinds, competitive barriers
     dcf_overrides: Optional[Dict[str, Any]]  # Reviewed qualitative-to-quant inputs
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid

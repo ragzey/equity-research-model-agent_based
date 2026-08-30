@@ -45,8 +45,12 @@ function showError(message) {
   empty.hidden = true;
   workspace.hidden = false;
   $("#identity").innerHTML = `<p class="error">${escapeHtml(message)}</p>`;
+  $("#cover").innerHTML = "";
   $("#metrics").innerHTML = "";
+  $("#key-data").innerHTML = "";
+  $("#charts").innerHTML = "";
   $("#panel-memo").innerHTML = "";
+  $("#panel-assumptions").innerHTML = "";
   $("#panel-desk").innerHTML = "";
 }
 
@@ -95,30 +99,147 @@ async function loadMeta() {
   });
 }
 
+function ratingClass(rating) {
+  const value = String(rating || "").toLowerCase();
+  if (value === "buy") return "is-buy";
+  if (value === "sell") return "is-sell";
+  if (value === "hold") return "is-hold";
+  return "is-na";
+}
+
+let lastPack = null;
+
+function renderCharts(pack) {
+  lastPack = pack;
+  const charts = $("#charts");
+  const points = pack.valuation_points || [];
+  const history = pack.price_history || {};
+  const historyPoints = history.points || [];
+  if (!points.length && historyPoints.length < 2) {
+    charts.innerHTML = "";
+    return;
+  }
+  const valuationFigure = points.length
+    ? `<figure>
+        <figcaption>Exhibit 1 · Valuation versus the market</figcaption>
+        <canvas id="chart-valuation"></canvas>
+        <p class="chart-note">DCF range from the WACC/g grid. Dashed line is the last price. ${escapeHtml(pack.pt_method || "")}</p>
+      </figure>`
+    : "";
+  const marketFigure =
+    historyPoints.length >= 2
+      ? `<figure>
+        <figcaption>Exhibit 2 · 12-month indexed price versus ${escapeHtml(history.benchmark_label || history.benchmark || "the market")}</figcaption>
+        <canvas id="chart-market"></canvas>
+        <p class="chart-note">Weekly adjusted closes rebased to 100 at ${escapeHtml(history.start || "the start of the window")}. Source: Yahoo Finance.</p>
+      </figure>`
+      : "";
+  charts.innerHTML = valuationFigure + marketFigure;
+  requestAnimationFrame(() => {
+    if (window.ResearchCharts && points.length) {
+      window.ResearchCharts.drawValuationField($("#chart-valuation"), points);
+    }
+    if (window.ResearchCharts && historyPoints.length >= 2) {
+      window.ResearchCharts.drawIndexedPerformance($("#chart-market"), history);
+    }
+  });
+}
+
+function renderAssumptions(pack) {
+  const rows = pack.assumptions || [];
+  if (!rows.length) {
+    $("#panel-assumptions").innerHTML = "<p class='hint'>No assumption register on this note.</p>";
+    return;
+  }
+  const body = rows
+    .map(
+      (row) => `
+      <tr>
+        <td>${escapeHtml(row.item || "")}</td>
+        <td>${escapeHtml(row.value || "")}</td>
+        <td>${escapeHtml(row.justification || "")}</td>
+        <td>${escapeHtml(row.source || "")}</td>
+      </tr>`
+    )
+    .join("");
+  $("#panel-assumptions").innerHTML = `
+    <table class="assumptions">
+      <thead>
+        <tr>
+          <th>Assumption</th>
+          <th>Value</th>
+          <th>Justification</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
 function renderSummary(summary) {
   empty.hidden = true;
   workspace.hidden = false;
+  const pack = summary.report_pack || {};
   const verified = summary.verified
     ? `<span class="chip ok">Verified</span>`
     : `<span class="chip warn">Not verified</span>`;
   const method = escapeHtml(summary.valuation_method || "n/a");
   const firm = escapeHtml(summary.firm_type || "Unclassified");
   const desk = escapeHtml(summary.desk_mode || "n/a");
+  const name = escapeHtml(pack.company_name || summary.company_name || summary.ticker || "");
+  const industry = escapeHtml(pack.industry || summary.industry || "");
+  const country = escapeHtml(pack.country || summary.country || "");
+  const peers = (summary.peer_selection && summary.peer_selection.selected) || [];
+  const peerMode = (summary.peer_selection && summary.peer_selection.mode) || "auto";
+  const peerChip = peers.length
+    ? `<span class="chip">peers ${escapeHtml(peers.join(" "))} (${escapeHtml(peerMode)})</span>`
+    : "";
   $("#identity").innerHTML = `
-    <div class="ticker">${escapeHtml(summary.ticker || "")}</div>
+    <div class="ticker">${name}</div>
+    <span class="chip">${escapeHtml(summary.ticker || "")}</span>
+    ${industry ? `<span class="chip">${industry}</span>` : ""}
+    ${country ? `<span class="chip">${country}</span>` : ""}
     <span class="chip">${firm}</span>
     <span class="chip">${method}</span>
     ${verified}
     <span class="chip">desk ${desk}</span>
+    ${peerChip}
   `;
 
+  const rating = pack.model_rating || summary.model_rating;
+  const ratingLabel = rating ? String(rating).toUpperCase() : "N/A";
   const showValue = summary.valuation_method !== "unsupported_financial";
-  $("#metrics").innerHTML = `
-    <div class="metric"><span>Price</span><strong>${fmtUsd(summary.share_price)}</strong></div>
-    <div class="metric"><span>Model value</span><strong>${showValue ? fmtUsd(summary.display_value) : "—"}</strong></div>
-    <div class="metric"><span>WACC</span><strong>${showValue ? fmtPct(summary.wacc) : "—"}</strong></div>
-    <div class="metric"><span>vs price</span><strong>${showValue ? fmtSignedPct(summary.gap) : "—"}</strong></div>
-  `;
+  $("#cover").innerHTML = showValue
+    ? `
+    <div class="rating ${ratingClass(rating)}">${escapeHtml(ratingLabel)}</div>
+    <div class="cover-cell"><span>12-month PT</span><strong>${fmtUsd(pack.price_target_12m)}</strong></div>
+    <div class="cover-cell"><span>Share price</span><strong>${fmtUsd(pack.share_price != null ? pack.share_price : summary.share_price)}</strong></div>
+    <div class="cover-cell"><span>Upside to PT</span><strong>${fmtSignedPct(pack.upside_to_pt)}</strong></div>
+    <div class="cover-cell"><span>Fair value</span><strong>${fmtUsd(pack.fair_value)}</strong></div>
+    <p class="disclaimer">${escapeHtml(pack.model_rating_note || "Model output only; not an investment recommendation.")}</p>
+  `
+    : `<p class="disclaimer">Financial-services firms are out of scope for this FCFF model.</p>`;
+
+  $("#metrics").innerHTML = showValue
+    ? `
+    <div class="metric"><span>DCF</span><strong>${fmtUsd(pack.dcf_value != null ? pack.dcf_value : summary.display_value)}</strong></div>
+    <div class="metric"><span>Relative EV/EBITDA</span><strong>${fmtUsd(pack.relative_value)}</strong></div>
+    <div class="metric"><span>WACC</span><strong>${fmtPct(summary.wacc)}</strong></div>
+    <div class="metric"><span>vs price (FV)</span><strong>${fmtSignedPct(pack.upside_to_fair_value != null ? pack.upside_to_fair_value : summary.gap)}</strong></div>
+  `
+    : "";
+
+  const keyRows = pack.key_data || [];
+  $("#key-data").innerHTML = keyRows
+    .map(
+      (row) =>
+        `<div class="key-row"><span>${escapeHtml(row.label || "")}</span><strong>${escapeHtml(row.value || "")}</strong></div>`
+    )
+    .join("");
+
+  renderCharts(pack);
+  renderAssumptions(pack);
 
   const downloads = [];
   if (summary.memo_name) {
@@ -232,6 +353,20 @@ form.addEventListener("submit", async (event) => {
 document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
     form.requestSubmit();
+  }
+});
+
+window.addEventListener("resize", () => {
+  if (!lastPack || !window.ResearchCharts) return;
+  const points = lastPack.valuation_points || [];
+  const history = lastPack.price_history || {};
+  const valuation = $("#chart-valuation");
+  const market = $("#chart-market");
+  if (valuation && points.length) {
+    window.ResearchCharts.drawValuationField(valuation, points);
+  }
+  if (market && (history.points || []).length >= 2) {
+    window.ResearchCharts.drawIndexedPerformance(market, history);
   }
 });
 

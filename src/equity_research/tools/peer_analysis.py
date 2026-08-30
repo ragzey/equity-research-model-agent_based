@@ -62,6 +62,7 @@ def fetch_relative_valuation_metrics(ticker: str) -> Dict[str, Any]:
         "trailing_pe": _safe_float(info.get("trailingPE")),
         "forward_pe": _safe_float(info.get("forwardPE")),
         "ev_to_ebitda": _safe_float(info.get("enterpriseToEbitda")),
+        "ebitda": _safe_float(info.get("ebitda")),
         "operating_margin_pct": _pct_from_fraction(info.get("operatingMargins")),
         "revenue_growth_yoy_pct": _pct_from_fraction(info.get("revenueGrowth")),
     }
@@ -85,6 +86,7 @@ def fetch_peer_metadata(ticker: str) -> Dict[str, Any]:
         "market_cap": info.get("marketCap"),
         "country": info.get("country"),
         "website": info.get("website"),
+        "quote_type": info.get("quoteType"),
     }
     cache_set("peer_metadata", clean, metadata)
     return metadata

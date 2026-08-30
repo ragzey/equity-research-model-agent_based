@@ -268,6 +268,10 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
                 "company_specific_risk_premium": company_risk_premium,
                 "total_debt": total_debt,
                 "cash_and_equivalents": cash,
+                "indicated_dividend": info.get("dividendRate")
+                or info.get("trailingAnnualDividendRate"),
+                "fifty_two_week_low": info.get("fiftyTwoWeekLow"),
+                "fifty_two_week_high": info.get("fiftyTwoWeekHigh"),
             },
             "firm_classification": assumptions,
             "dcf_overrides_applied": overrides or None,

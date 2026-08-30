@@ -103,6 +103,7 @@ class DeskProtocolTests(unittest.TestCase):
             "brief",
         )
         self.assertTrue(any(item["to_agent"] == "assumption_reviewer" for item in qual))
+        self.assertTrue(any(item["to_agent"] == "lead_writer" for item in qual))
         self.assertTrue(any(item["kind"] == "risk_finding" for item in qual))
 
         comp = _competitive_handoffs("TARGET", SMALL_CAP_MATRIX, "outlook")

@@ -81,11 +81,23 @@ def print_summary(ticker: str, final_state: Dict[str, Any]) -> None:
     print("==========================================")
     print(f"Valuation method    : {valuation_method}")
     print(f"Firm classification : {classification.get('firm_type', 'N/A')}")
+    pack = valuation.get("report_pack") or {}
+    if pack.get("model_rating"):
+        upside = pack.get("upside_to_pt")
+        upside_text = f"{upside:+.1%}" if upside is not None else "n/a"
+        print(
+            f"Model band          : {pack['model_rating']} "
+            f"({upside_text} vs last; ±15% convention, not a recommendation)"
+        )
+    if pack.get("fair_value") is not None:
+        print(f"Blended fair value  : ${pack['fair_value']:,.2f} per share")
+    if pack.get("price_target_12m") is not None:
+        print(f"12-month PT         : ${pack['price_target_12m']:,.2f} per share")
     print(f"Discount rate       : {wacc:.2%}" if wacc is not None else "Discount rate       : N/A")
     print(
-        f"Illustrative value  : ${intrinsic_value:,.2f} per share"
+        f"Illustrative DCF    : ${intrinsic_value:,.2f} per share"
         if intrinsic_value is not None
-        else "Illustrative value  : N/A"
+        else "Illustrative DCF    : N/A"
     )
     terminal_share = dcf.get("terminal_value_share_of_enterprise_value")
     if terminal_share is not None:
@@ -93,6 +105,16 @@ def print_summary(ticker: str, final_state: Dict[str, Any]) -> None:
     print(
         f"Arithmetic review    : {'VERIFIED' if final_state.get('is_math_verified') else 'NOT VERIFIED'}"
     )
+    selection = final_state.get("peer_selection") or {}
+    selected = selection.get("selected") or final_state.get("competitor_tickers") or []
+    if selected:
+        print(
+            f"Peer set             : {', '.join(selected)} "
+            f"({selection.get('mode') or 'auto'})"
+        )
+    harvested = final_state.get("discovered_bond_isins") or []
+    if harvested:
+        print(f"Harvested ISINs      : {', '.join(harvested)}")
     print(
         f"Memo path            : {final_state.get('final_equity_memo_path') or 'N/A'}"
     )
@@ -145,13 +167,13 @@ def _parser() -> argparse.ArgumentParser:
         "--peers",
         nargs="*",
         default=[],
-        help="Optional space-separated competitor tickers.",
+        help="Optional override. If omitted, the competitive analyst harvests comps.",
     )
     parser.add_argument(
         "--target-bonds",
         nargs="*",
         default=[],
-        help="Optional space-separated corporate bond ISINs.",
+        help="Optional TRACE ISIN override. If omitted, ISINs are harvested from the 10-K.",
     )
     parser.add_argument(
         "--log-level",

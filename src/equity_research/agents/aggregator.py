@@ -9,7 +9,8 @@ from ..tools.consensus import extract_consensus_growth
 from ..tools.finnhub_bond import get_outstanding_bonds_for_ticker
 from ..tools.firm_classifier import is_financial_services_firm
 from ..tools.market_api import fetch_financial_statements
-from ..tools.peer_analysis import fetch_peer_metadata
+from ..tools.peer_discovery import discover_peer_candidates, hydrate_peer_metadata
+from ..tools.price_history import fetch_rebased_price_history
 from ..tools.sec_api import fetch_latest_10k_sections
 
 logger = logging.getLogger("DataAggregator")
@@ -125,29 +126,47 @@ def aggregator_node(state: EquityResearchState) -> Dict[str, Any]:
         updates["outstanding_bonds"] = None
         logger.info("No valid TRACE ISIN list; outstanding_bonds set to None.")
 
-    # 4. Peer group metadata pre-fetch for Competitive Analyst
-    competitor_tickers: Optional[List[str]] = state.get("competitor_tickers")
-    peer_group = [ticker]
-    if competitor_tickers:
-        for raw in competitor_tickers:
-            sym = raw.strip().upper()
-            if sym and sym not in peer_group:
-                peer_group.append(sym)
-    if len(peer_group) > 1:
-        logger.info(
-            "Peer group configured (%d tickers): %s",
-            len(peer_group),
-            ", ".join(peer_group),
-        )
-    else:
-        logger.info("No competitors supplied; fetching target metadata only.")
+    # 4. Peer harvest for the competitive analyst (operator names are optional)
+    pinned_peers: List[str] = []
+    for raw in state.get("competitor_tickers") or []:
+        symbol = raw.strip().upper()
+        if symbol and symbol != ticker and symbol not in pinned_peers:
+            pinned_peers.append(symbol)
 
-    peer_metadata: Dict[str, Dict[str, Any]] = {}
-    for symbol in peer_group:
+    discovered: Dict[str, Any] = {"target": ticker, "candidates": [], "sources_used": []}
+    lookup_symbols = [ticker] + pinned_peers
+    if pinned_peers:
+        logger.info(
+            "Operator pinned %d peer(s); skipping open-ended discovery: %s",
+            len(pinned_peers),
+            ", ".join(pinned_peers),
+        )
+        updates["competitor_tickers"] = pinned_peers
+    else:
         try:
-            peer_metadata[symbol] = fetch_peer_metadata(symbol)
+            discovered = discover_peer_candidates(ticker)
         except Exception:
-            logger.exception("Failed to fetch peer metadata for %s", symbol)
+            logger.exception("Peer discovery failed for %s", ticker)
+            discovered = {"target": ticker, "candidates": [], "sources_used": []}
+        lookup_symbols.extend(
+            str(row.get("ticker"))
+            for row in (discovered.get("candidates") or [])
+            if row.get("ticker")
+        )
+        logger.info(
+            "No peers supplied; harvested %d similar-stock candidate(s) from %s.",
+            len(discovered.get("candidates") or []),
+            ", ".join(discovered.get("sources_used") or []) or "no source",
+        )
+    updates["discovered_peers"] = discovered
+
+    peer_metadata = hydrate_peer_metadata(lookup_symbols)
     updates["peer_metadata"] = peer_metadata or None
+
+    try:
+        updates["price_history"] = fetch_rebased_price_history(ticker)
+    except Exception:
+        logger.exception("Indexed price history unavailable for %s", ticker)
+        updates["price_history"] = None
 
     return updates

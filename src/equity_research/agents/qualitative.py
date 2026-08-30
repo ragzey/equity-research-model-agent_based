@@ -6,7 +6,7 @@ import logging
 import re
 from typing import Any, Dict, Iterable, List, Optional
 
-from ..graphs.desk import QUALITATIVE, REVIEWER, make_message
+from ..graphs.desk import QUALITATIVE, REVIEWER, WRITER, make_message
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import QUALITATIVE_SYSTEM
 from ..tools.sec_api import fetch_latest_10k_sections
@@ -153,7 +153,14 @@ def _qualitative_handoffs(
             "risk_brief",
             f"{ticker} qualitative brief for assumption review.",
             {"summary": (summary or "")[:4000], "finding_count": len(evidence)},
-        )
+        ),
+        make_message(
+            QUALITATIVE,
+            WRITER,
+            "qualitative_claim",
+            (summary or f"{ticker} qualitative assessment.")[:1500],
+            {"finding_count": len(evidence)},
+        ),
     ]
     for item in evidence[:8]:
         excerpt = item.get("excerpt") or ""

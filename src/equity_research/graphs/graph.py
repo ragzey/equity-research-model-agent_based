@@ -25,11 +25,12 @@ def build_research_graph():
     """
     Build the current flow.
 
-    Competitive and Qualitative run in parallel after aggregation and post
-    structured handoffs onto `agent_messages`. The assumption reviewer accepts
-    or rejects bounded Python candidates (LLM when configured; otherwise
-    auto-accept). Quant remains deterministic Python. The writer synthesizes
-    disagreements into the memo.
+    Competitive and Qualitative run in parallel after aggregation. The aggregator
+    harvests similar-stock candidates and 10-K bond ISINs on its own. Competitive
+    then selects the comparable set (LLM when configured; otherwise a ranked
+    heuristic) and posts that reasoning. The assumption reviewer accepts or
+    rejects bounded Python DCF candidates. Quant remains deterministic Python.
+    The writer synthesizes disagreements into the memo.
     """
     workflow = StateGraph(EquityResearchState)
     workflow.add_node("aggregator", aggregator_node)

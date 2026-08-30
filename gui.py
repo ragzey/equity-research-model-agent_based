@@ -25,6 +25,8 @@ if str(SRC_ROOT) not in sys.path:
 load_dotenv(PROJECT_ROOT / ".env")
 
 from main import run_pipeline  # noqa: E402
+from equity_research.tools.report_pack import build_report_pack  # noqa: E402
+from equity_research.tools.report_pack import build_report_pack  # noqa: E402
 
 REPORTS_DIR = PROJECT_ROOT / "outputs" / "reports"
 TEMPLATE_DIR = PROJECT_ROOT / "gui_templates"
@@ -100,6 +102,14 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
     if memo_path and Path(memo_path).is_file():
         memo_text = Path(memo_path).read_text(encoding="utf-8")
 
+    pack = summary.get("report_pack")
+    if not isinstance(pack, dict) or not pack.get("key_data"):
+        try:
+            pack = build_report_pack(state)
+        except Exception:
+            logger.exception("Could not rebuild report pack for GUI summary.")
+            pack = pack if isinstance(pack, dict) else {}
+
     handoffs = []
     for item in state.get("agent_messages") or []:
         handoffs.append(
@@ -113,6 +123,10 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
 
     payload = {
         "ticker": state.get("ticker"),
+        "company_name": pack.get("company_name"),
+        "industry": pack.get("industry"),
+        "sector": pack.get("sector"),
+        "country": pack.get("country"),
         "target_year": state.get("target_year"),
         "firm_type": classification.get("firm_type"),
         "valuation_method": summary.get("valuation_method")
@@ -120,9 +134,19 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
         or "corporate_fcff",
         "is_financial": bool(state.get("is_financial")),
         "verified": bool(state.get("is_math_verified")),
-        "share_price": price,
+        "share_price": pack.get("share_price") if pack.get("share_price") is not None else price,
         "model_value": raw_value,
         "display_value": display_value,
+        "fair_value": pack.get("fair_value"),
+        "price_target_12m": pack.get("price_target_12m"),
+        "upside_to_pt": pack.get("upside_to_pt"),
+        "upside_to_fair_value": pack.get("upside_to_fair_value"),
+        "model_rating": pack.get("model_rating"),
+        "model_rating_note": pack.get("model_rating_note"),
+        "dcf_value": pack.get("dcf_value"),
+        "relative_value": pack.get("relative_value"),
+        "dcf_weight": pack.get("dcf_weight"),
+        "relative_weight": pack.get("relative_weight"),
         "gap": gap,
         "wacc": state.get("discount_rate"),
         "cost_of_equity": summary.get("cost_of_equity"),
@@ -135,7 +159,10 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "decisions": overrides.get("decisions") or [],
         "rationales": overrides.get("rationales") or {},
         "handoffs": handoffs,
+        "peer_selection": state.get("peer_selection"),
+        "discovered_bond_isins": state.get("discovered_bond_isins"),
         "review_findings": state.get("review_findings") or [],
+        "report_pack": pack,
         "memo_markdown": memo_text,
         "memo_html": _render_memo_html(memo_text),
         "memo_name": Path(memo_path).name if memo_path else None,

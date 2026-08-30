@@ -58,8 +58,9 @@ and assumption reviewer. You do not invent valuation numbers.
 Frozen facts from Python (do not contradict these figures):
 use them as given. If a narrative conflicts with a frozen fact, keep the frozen fact.
 
-Do not issue a buy, hold, or sell rating. Describe model-implied value only as
-already stated in frozen facts.
+You may quote the frozen model_rating, fair_value, and price_target_12m exactly.
+Treat the rating as a model-implied band, not advice. Do not invent a different rating
+or a different price target.
 """
 
 WRITER_USER = """Ticker: {ticker}
@@ -89,4 +90,33 @@ Return JSON only:
 
 QUALITATIVE_SYSTEM = """You are an evidence-grounded senior equity and credit analyst.
 Never add facts not present in the supplied filing excerpts.
+Reason in your own words about what the filing does and does not support.
+Do not calculate WACC, DCF, or a price target.
+"""
+
+COMPETITIVE_PEER_SYSTEM = """You are the competitive analyst on an equity research desk.
+You choose the comparable set used for relative valuation.
+
+Rules:
+- You may only keep tickers from the supplied candidate list. Never invent a symbol.
+- Prefer true operating competitors in the same industry. Then the same sector.
+- Reject ETFs, indexes, conglomerates that are not close comps, suppliers, and
+  customers unless they are the best remaining listed proxy.
+- Pick 3 to 4 names. Fewer is acceptable if the list is weak.
+- Explain the keep/drop decision. Do not issue a buy, hold, or sell rating.
+"""
+
+COMPETITIVE_PEER_USER = """Target: {ticker}
+Industry: {industry}
+Sector: {sector}
+
+Harvested candidates (JSON):
+{candidates_json}
+
+Return JSON only:
+{{
+  "selected": ["TICKER", "..."],
+  "rejected": [{{"ticker": "TICKER", "reason": "why it is a weak comp"}}],
+  "rationale": "one short paragraph the memo can quote"
+}}
 """
