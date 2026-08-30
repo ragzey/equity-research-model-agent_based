@@ -10,6 +10,27 @@ logger = logging.getLogger("FirmClassifier")
 
 REVENUE_LABELS = ("total revenue", "revenue")
 EBIT_LABELS = ("ebit", "operating income", "operatingincome")
+NET_INCOME_LABELS = (
+    "net income",
+    "net income common stockholders",
+    "net income applicable to common shares",
+    "netincome",
+)
+INTEREST_LABELS = (
+    "interest expense",
+    "interestexpense",
+    "interest expense non operating",
+    "interest expense, net",
+    "interest expense net of interest income",
+)
+EPS_LABELS = (
+    "diluted eps",
+    "diluted earnings per share",
+    "dilutedeps",
+    "basic eps",
+    "basic earnings per share",
+    "basiceps",
+)
 UNSUPPORTED_FCFF_SECTORS = {"financial services", "financials"}
 
 
@@ -88,17 +109,58 @@ def extract_revenue_history(
     return history
 
 
-def extract_operating_baseline(
-    income_statement: Dict[Any, Any],
-) -> Tuple[float, float]:
-    """Return latest positive revenue and corresponding EBIT/operating income."""
+def _period_label(period: Any) -> Optional[str]:
+    if period is None:
+        return None
+    if isinstance(period, datetime):
+        return period.date().isoformat()
+    if isinstance(period, date):
+        return period.isoformat()
+    text = str(period).strip()
+    return text[:32] if text else None
+
+
+def extract_operating_pnl_anchor(income_statement: Dict[Any, Any]) -> Dict[str, Any]:
+    """
+    One fiscal period for the DCF baseline and the last-reported P&L column.
+
+    Revenue and EBIT must both be present. NI, interest, and EPS are taken from
+    that same period when the statements carry them — not from a newer stub year.
+    """
     rows = _period_major_rows(income_statement)
     for period in sorted(rows, key=_period_sort_key, reverse=True):
         revenue = _value_for_labels(rows[period], REVENUE_LABELS)
         ebit = _value_for_labels(rows[period], EBIT_LABELS)
-        if revenue is not None and revenue > 0 and ebit is not None:
-            return revenue, ebit
+        if revenue is None or revenue <= 0 or ebit is None:
+            continue
+        row = rows[period]
+        interest = _value_for_labels(row, INTEREST_LABELS)
+        return {
+            "period": period,
+            "period_label": _period_label(period),
+            "revenue": revenue,
+            "ebit": ebit,
+            "net_income": _value_for_labels(row, NET_INCOME_LABELS),
+            "interest_expense": abs(interest) if interest is not None else None,
+            "reported_eps": _value_for_labels(row, EPS_LABELS),
+        }
     raise ValueError("Latest revenue and EBIT/operating income are required for DCF.")
+
+
+def extract_operating_baseline(
+    income_statement: Dict[Any, Any],
+) -> Tuple[float, float]:
+    """Return latest positive revenue and corresponding EBIT/operating income."""
+    anchor = extract_operating_pnl_anchor(income_statement)
+    return float(anchor["revenue"]), float(anchor["ebit"])
+
+
+def extract_latest_net_income(income_statement: Dict[Any, Any]) -> Optional[float]:
+    """Net income from the same period as the DCF revenue/EBIT baseline."""
+    try:
+        return extract_operating_pnl_anchor(income_statement).get("net_income")
+    except ValueError:
+        return None
 
 
 def calculate_revenue_cagr(income_statement: Dict[Any, Any]) -> Optional[float]:

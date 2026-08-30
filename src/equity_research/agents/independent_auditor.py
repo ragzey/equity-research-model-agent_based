@@ -18,6 +18,7 @@ from ..prompts.desk import AUDITOR_SYSTEM, AUDITOR_USER
 from ..tools.operating_cycle import operating_cycle_ledger
 from ..tools.pdf_memo import write_memo_pdf
 from ..tools.report_pack import build_report_pack
+from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("IndependentAuditor")
@@ -80,10 +81,22 @@ _KNOWN_TOKENS = {
     "PPE",
     "AR",
     "AP",
+    "FTC",
+    "DOJ",
+    "FDA",
+    "EPA",
+    "IMF",
+    "WTO",
+    "ECB",
+    "OECD",
 }
 _TICKER_RE = re.compile(r"\b[A-Z]{2,5}\b")
 _PT_RE = re.compile(
     r"(12-month price target of )(\$[0-9,]+\.\d{2})",
+    re.IGNORECASE,
+)
+_STREET_MEAN_PT_RE = re.compile(
+    r"(Street mean 12-month target is )(\$[0-9,]+\.\d{2})",
     re.IGNORECASE,
 )
 _FAIR_RE = re.compile(
@@ -275,7 +288,7 @@ def _grounded_text(
     extra = novel_tickers(cleaned, allowed, background)
     if extra:
         return None
-    if "http://" in cleaned.lower() or "https://" in cleaned.lower():
+    if contains_web_link(cleaned):
         return None
     return cleaned
 
@@ -301,6 +314,12 @@ def align_memo_to_pack(memo: str, pack: Dict[str, Any]) -> Tuple[str, List[Dict[
             _fmt_usd(pack.get("share_price")),
             "MEMO_SHARE_PRICE",
             "last price",
+        ),
+        (
+            _STREET_MEAN_PT_RE,
+            _fmt_usd((pack.get("street") or {}).get("target_mean")),
+            "MEMO_STREET_PT",
+            "Street mean 12-month target",
         ),
     ]
     wacc = pack.get("wacc")
@@ -457,6 +476,11 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "fair_value": pack.get("fair_value"),
         "price_target_12m": pack.get("price_target_12m"),
         "model_rating": pack.get("model_rating"),
+        "year1_eps": pack.get("year1_eps"),
+        "street_target_mean": (pack.get("street") or {}).get("target_mean"),
+        "thesis_headline": (pack.get("thesis") or {}).get("headline"),
+        "bear_price_target": (pack.get("operating_scenarios") or {}).get("bear_pt"),
+        "bull_price_target": (pack.get("operating_scenarios") or {}).get("bull_pt"),
         "terminal_wacc": dcf.get("terminal_wacc_applied"),
         "terminal_growth": dcf.get("terminal_growth_rate_applied"),
         "instruction": "Flag only. Do not replace any of these figures.",
@@ -469,6 +493,11 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
             "model_rating": pack.get("model_rating"),
             "dcf_value": pack.get("dcf_value"),
             "wacc": pack.get("wacc"),
+            "year1_eps": pack.get("year1_eps"),
+            "street_target_mean": (pack.get("street") or {}).get("target_mean"),
+            "thesis_spine": (pack.get("thesis") or {}).get("spine"),
+            "bear_price_target": (pack.get("operating_scenarios") or {}).get("bear_pt"),
+            "bull_price_target": (pack.get("operating_scenarios") or {}).get("bull_pt"),
         },
         "memo_excerpt": _memo_excerpt(state.get("final_equity_memo_path")),
     }
@@ -810,6 +839,11 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
         allowed=allowed,
         background=background,
     )
+    writer_thesis = _grounded_text(
+        writer.get("corrected_investment_thesis"),
+        allowed=allowed,
+        background=filing or background,
+    )
     if writer_qual:
         memo_text = _replace_heading_block(memo_text, "## Company and industry", writer_qual)
         corrections.append("Rewrote company/industry memo prose against ledger evidence.")
@@ -819,6 +853,11 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
     if writer_desk:
         memo_text = _replace_heading_block(memo_text, "### Writer synthesis", writer_desk)
         corrections.append("Rewrote writer synthesis against frozen facts.")
+    if writer_thesis:
+        memo_text = _replace_heading_block(
+            memo_text, "### Why this differs from Street", writer_thesis
+        )
+        corrections.append("Rewrote thesis why-paragraph against ledger evidence.")
     agent_blocks["writer"] = {
         "action": writer.get("action")
         or ("correct" if any(item.get("corrected") for item in python_findings if item["agent"] == "writer") else "pass"),

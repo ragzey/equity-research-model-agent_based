@@ -92,7 +92,8 @@ Evaluate each agent independently. Return JSON only:
     "issues": ["short issue"],
     "corrected_qualitative_narrative": null,
     "corrected_industry_outlook": null,
-    "corrected_desk_synthesis": null
+    "corrected_desk_synthesis": null,
+    "corrected_investment_thesis": null
   }}
 }}
 
@@ -177,6 +178,10 @@ use them as given. If a narrative conflicts with a frozen fact, keep the frozen 
 You may quote the frozen model_rating, fair_value, and price_target_12m exactly.
 Treat the rating as a model-implied band, not advice. Do not invent a different rating
 or a different price target.
+Do not invent catalyst dates. If a date is not in the catalyst list, omit it.
+Do not invent Street targets, Street EPS, or consensus growth. Those figures are
+frozen Python outputs. investment_thesis is the why only — do not restate or
+change dollar targets or EPS.
 Do not invent sources, URLs, accession numbers, or citations. The memo's Sources
 section is built from the ledger, not from this narrative.
 """
@@ -204,11 +209,24 @@ Industry / macro drivers:
 Operations / working capital:
 {operations_json}
 
+Operating scenarios (Python; do not replace these figures):
+{scenarios_json}
+
+Dated catalysts (ledger dates only; do not add dates):
+{catalysts_json}
+
+Model versus Street (Python; do not replace these figures):
+{street_json}
+
+Thesis spine (Python; do not rewrite the numbers):
+{thesis_spine}
+
 Return JSON only:
 {{
   "industry_outlook": "concise synthesized industry section in markdown",
   "qualitative_narrative": "concise synthesized qualitative section in markdown",
-  "desk_synthesis": "what the agents agreed and disagreed on, and what Quant was allowed to use"
+  "desk_synthesis": "what the agents agreed and disagreed on, and what Quant was allowed to use. No URLs.",
+  "investment_thesis": "why the model is above, below, or in line with Street, using only frozen facts and filing evidence. Do not restate dollar targets or EPS."
 }}
 """
 
@@ -377,6 +395,7 @@ Return JSON only:
 
 QUALITATIVE_SYSTEM = """You are an evidence-grounded senior equity and credit analyst.
 Never add facts not present in the supplied filing excerpts.
+Do not invent URLs, accession numbers, or citations.
 Reason in your own words about what the filing does and does not support.
 Do not calculate WACC, DCF, or a price target.
 """

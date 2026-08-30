@@ -13,7 +13,10 @@ from .firm_classifier import (
     is_financial_services_firm,
 )
 from .market_api import fetch_financial_statements
+from .catalysts import build_catalyst_register, extract_market_events
 from .operating_cycle import clip_sales_to_capital, measure_operating_cycle
+from .operating_scenarios import build_operating_scenarios
+from .street import build_thesis_pack, extract_street_snapshot
 from .qual_to_quant import generate_valuation_overrides
 from .assumption_menus import (
     apply_architect_choices,
@@ -46,10 +49,15 @@ from .valuation import (
 __all__ = [
     "build_peer_comparison_matrix",
     "build_dcf_sensitivity_grid",
+    "build_catalyst_register",
+    "build_operating_scenarios",
+    "build_thesis_pack",
+    "extract_street_snapshot",
     "calculate_cost_of_debt",
     "calculate_wacc",
     "classify_firm_and_adjust_assumptions",
     "extract_ebit_and_interest",
+    "extract_market_events",
     "extract_operating_baseline",
     "fetch_financial_statements",
     "fetch_latest_10k_sections",

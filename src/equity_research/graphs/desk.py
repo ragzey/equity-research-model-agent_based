@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional
 
+from ..utils.grounding import contains_web_link
+
 QUALITATIVE = "qualitative_analyst"
 COMPETITIVE = "competitive_analyst"
 INDUSTRY_MACRO = "industry_macro"
@@ -91,6 +93,8 @@ def apply_override_decisions(
         decision = by_key.get(key) or {}
         action = str(decision.get("action") or "").strip().lower()
         reason = str(decision.get("reason") or "").strip()
+        if contains_web_link(reason):
+            reason = ""
         if action not in {"accept", "reject"}:
             action = "reject"
             reason = reason or (

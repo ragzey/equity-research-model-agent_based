@@ -24,6 +24,7 @@ class EquityResearchState(TypedDict):
     peer_metadata: Optional[Dict[str, Dict[str, Any]]]  # Aggregator pre-fetch per ticker
     market_info: Optional[Dict[str, Any]]  # Yahoo .info snapshot for the target
     consensus_growth: Optional[Dict[str, Any]]  # Labeled Yahoo consensus overlay
+    street_snapshot: Optional[Dict[str, Any]]  # Yahoo target / EPS / rec, no invented quotes
     discovered_bond_isins: Optional[List[str]]  # 10-K harvested ISIN candidates
     discovered_peers: Optional[Dict[str, Any]]  # Yahoo/Finnhub similar-stock harvest
     price_history: Optional[Dict[str, Any]]  # Indexed 12-month closes vs market
@@ -46,8 +47,10 @@ class EquityResearchState(TypedDict):
     industry_outlook: Optional[str]  # Industry/macro demand narrative
     industry_macro_packet: Optional[Dict[str, Any]]  # Structured category/cycle/macro views
     operations_packet: Optional[Dict[str, Any]]  # CCC, NWC, reinvestment views + metrics
+    event_calendar: Optional[List[Dict[str, Any]]]  # Yahoo earnings / dividend dates
     dcf_overrides: Optional[Dict[str, Any]]  # Architect candidates after reviewer veto
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid
+    operating_scenarios: Optional[Dict[str, Any]]  # Bear/base/bull from operating menus
     agent_messages: Annotated[List[Dict[str, Any]], operator.add]  # Desk handoffs (append-only)
     audit_report: Optional[Dict[str, Any]]  # Independent auditor findings and corrections
 

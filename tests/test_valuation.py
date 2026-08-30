@@ -90,6 +90,35 @@ class ValuationTests(unittest.TestCase):
         self.assertAlmostEqual(last["wacc"], 0.08)
         self.assertGreater(result["enterprise_value"], 0)
 
+    def test_pnl_precedes_fcff_and_eps_uses_shares(self):
+        result = perform_3stage_dcf_valuation(
+            base_revenue=100,
+            base_ebit=20,
+            sales_to_capital=2.0,
+            high_growth_rate=0.10,
+            wacc=0.10,
+            terminal_wacc=0.08,
+            shares_outstanding=10,
+            total_debt=0,
+            cash_and_equivalents=0,
+            high_growth_years=1,
+            transition_years=1,
+            terminal_growth_rate=0.025,
+            terminal_margin=0.20,
+            stable_sales_to_capital=2.0,
+            interest_expense=5.0,
+        )
+        year1 = result["projections"][0]
+        self.assertAlmostEqual(year1["revenue"], 110.0)
+        self.assertAlmostEqual(year1["ebit"], 22.0)
+        self.assertAlmostEqual(year1["interest_expense"], 5.0)
+        self.assertAlmostEqual(year1["ebt"], 17.0)
+        self.assertAlmostEqual(year1["net_income"], 17.0 * 0.79)
+        self.assertAlmostEqual(year1["eps"], year1["net_income"] / 10)
+        self.assertAlmostEqual(year1["nopat"], 22.0 * 0.79)
+        self.assertAlmostEqual(year1["fcff"], year1["nopat"] - (10.0 / 2.0))
+        self.assertIn("Revenue grows", result["pnl_method"])
+
     def test_rejects_unsafe_terminal_spread(self):
         with self.assertRaises(ValueError):
             perform_3stage_dcf_valuation(

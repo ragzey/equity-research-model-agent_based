@@ -239,6 +239,27 @@ class MenuPolicyTests(unittest.TestCase):
         self.assertAlmostEqual(proposed["high_growth_rate"], base)
         self.assertEqual(proposed["architect_choices"]["high_growth_rate"], "base")
 
+    def test_missing_allow_list_does_not_unlock_high(self):
+        bundle = build_assumption_bundle(_tpr_state(), risk_free_rate=0.04)
+        menus = build_choice_menus(
+            bundle, _constructive_packet(), risk_free_rate=0.04
+        )
+        self.assertIn("high", menus["high_growth_rate"])
+        menus = dict(menus)
+        menus["allowed"] = {}
+        proposed = apply_architect_choices(
+            bundle,
+            menus,
+            {"high_growth_rate": "high"},
+            reasons={
+                "high_growth_rate": "Category growth is above history with filing evidence."
+            },
+        )
+        self.assertEqual(proposed["architect_choices"]["high_growth_rate"], "base")
+        self.assertAlmostEqual(
+            proposed["high_growth_rate"], bundle["proposed"]["high_growth_rate"]
+        )
+
 
 class PacketAndNodeTests(unittest.TestCase):
     def test_normalize_drops_urls_unknown_views_and_invented_quotes(self):
@@ -263,6 +284,16 @@ class PacketAndNodeTests(unittest.TestCase):
             "high",
             allowed_growth_choices(packet),
         )
+
+    def test_normalize_drops_www_host_without_scheme(self):
+        packet = normalize_industry_macro_packet(
+            {
+                "narrative": "Demand is strong per www.example.com/outlook.",
+            },
+            risk_free_rate=0.041,
+            ledger_text="The company is expanding digital and international retail. 4.10%",
+        )
+        self.assertEqual(packet["narrative"], "")
 
     def test_narrative_rejects_substring_numbers(self):
         text = _ground_narrative(

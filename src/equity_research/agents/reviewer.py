@@ -21,6 +21,7 @@ from ..tools.assumption_menus import (
     build_assumption_bundle,
     policy_terminal_growth,
 )
+from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("ValuationAssumptionReviewer")
@@ -170,6 +171,10 @@ def valuation_assumption_reviewer_node(
             overrides[carry] = proposed[carry]
     notes_to_quant = str(llm_payload.get("notes_to_quant") or "").strip()
     notes_to_writer = str(llm_payload.get("notes_to_writer") or "").strip()
+    if contains_web_link(notes_to_quant):
+        notes_to_quant = ""
+    if contains_web_link(notes_to_writer):
+        notes_to_writer = ""
     if not notes_to_quant:
         notes_to_quant = (
             "Quant may use only accepted overrides; rejected keys reverted to baseline."

@@ -454,6 +454,12 @@ button[type="submit"]:disabled {
   max-width: 1100px;
 }
 
+.panel h2 {
+  margin: 1.25rem 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
 .memo h1 {
   font-size: 22px;
   font-weight: 650;

@@ -12,6 +12,7 @@ from ..graphs.desk import ARCHITECT, INDUSTRY_MACRO, REVIEWER, WRITER, make_mess
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import INDUSTRY_MACRO_SYSTEM, INDUSTRY_MACRO_USER
 from ..tools.firm_classifier import calculate_revenue_cagr
+from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("IndustryMacroAnalyst")
@@ -51,6 +52,14 @@ _KNOWN_CAPS = {
     "USD",
     "WACC",
     "YOY",
+    "FTC",
+    "DOJ",
+    "FDA",
+    "EPA",
+    "IMF",
+    "WTO",
+    "ECB",
+    "OECD",
 }
 
 
@@ -61,7 +70,7 @@ def _clip_view(value: Any, allowed: set[str], default: str = "insufficient") -> 
 
 def _evidence(value: Any, limit: int = 400) -> str:
     text = " ".join(str(value or "").split())
-    if "http://" in text.lower() or "https://" in text.lower():
+    if contains_web_link(text):
         return ""
     return text[:limit]
 

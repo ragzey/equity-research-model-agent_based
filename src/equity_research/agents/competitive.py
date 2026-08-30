@@ -21,6 +21,7 @@ from ..tools.peer_discovery import (
     clip_rejected_picks,
     rank_peer_candidates,
 )
+from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("CompetitiveAnalyst")
@@ -154,7 +155,7 @@ def _llm_peer_picks(
     if not rejected:
         rejected = ranked.get("rejected") or []
     rationale = str(payload.get("rationale") or "").strip()
-    if "http://" in rationale.lower() or "https://" in rationale.lower():
+    if contains_web_link(rationale):
         rationale = ""
     if not rationale:
         raise LLMCallError("Competitive analyst did not return a peer-selection rationale.")
@@ -189,7 +190,7 @@ def _llm_pinned_rationale(
         required=True,
     ) or {}
     rationale = str(payload.get("rationale") or "").strip()
-    if "http://" in rationale.lower() or "https://" in rationale.lower():
+    if contains_web_link(rationale):
         rationale = ""
     if not rationale:
         raise LLMCallError(

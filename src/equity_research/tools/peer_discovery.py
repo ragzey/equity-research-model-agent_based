@@ -12,6 +12,7 @@ import requests
 
 from .cache import TTL_PEERS, cache_get, cache_set
 from .peer_analysis import fetch_peer_metadata
+from ..utils.grounding import contains_web_link
 
 logger = logging.getLogger("PeerDiscovery")
 
@@ -261,6 +262,8 @@ def clip_rejected_picks(
             reason = str(raw.get("reason") or "").strip()
         else:
             symbol = _clean_ticker(raw)
+            reason = ""
+        if contains_web_link(reason):
             reason = ""
         if not symbol or symbol not in allowed or symbol in seen:
             continue

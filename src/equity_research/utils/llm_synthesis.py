@@ -7,6 +7,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from .llm_client import chat_text
+from .grounding import contains_web_link
 
 logger = logging.getLogger("LLMSynthesis")
 
@@ -53,5 +54,8 @@ supported, because downstream rules may alter valuation assumptions."""
         timeout=60,
         required=True,
     )
+    if contains_web_link(content):
+        logger.warning("LLM industry outlook for %s contained a web link; dropped.", target)
+        return ""
     logger.info("LLM industry outlook generated for %s (%d chars).", target, len(content or ""))
     return content or ""

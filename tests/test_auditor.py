@@ -238,6 +238,44 @@ class ClipAndAlignTests(unittest.TestCase):
             novel_tickers("TJX will acquire ZZZZ next year.", allowed),
             ["ZZZZ"],
         )
+        self.assertEqual(
+            novel_tickers("An FTC inquiry is disclosed in Item 1A.", allowed),
+            [],
+        )
+
+    def test_align_memo_street_mean_target(self):
+        updated, findings = align_memo_to_pack(
+            "The Street mean 12-month target is $1.00 versus this model's $108.00.",
+            {
+                "price_target_12m": 108.0,
+                "share_price": 90.0,
+                "fair_value": 100.0,
+                "model_rating": "Hold",
+                "street": {"target_mean": 120.0},
+            },
+        )
+        self.assertIn("$120.00", updated)
+        self.assertNotIn("$1.00", updated)
+        self.assertIn("MEMO_STREET_PT", {item["code"] for item in findings})
+
+    def test_grounded_text_drops_www_links(self):
+        from equity_research.agents.independent_auditor import _grounded_text
+
+        self.assertIsNone(
+            _grounded_text(
+                "See www.example.com for the filing.",
+                allowed={"TJX"},
+                background="",
+            )
+        )
+        self.assertEqual(
+            _grounded_text(
+                "Item 1A discloses material litigation.",
+                allowed={"TJX"},
+                background="",
+            ),
+            "Item 1A discloses material litigation.",
+        )
 
 
 class IndependentAuditorNodeTests(unittest.TestCase):

@@ -73,11 +73,18 @@ class PeerRankingTests(unittest.TestCase):
             candidates,
             [
                 {"ticker": "ROST", "reason": "too close"},
+                {"ticker": "BURL", "reason": "see www.example.com/note"},
                 {"ticker": "NOTREAL", "reason": "invented"},
                 "SPY",
             ],
         )
-        self.assertEqual(clipped, [{"ticker": "ROST", "reason": "too close"}])
+        self.assertEqual(
+            clipped,
+            [
+                {"ticker": "ROST", "reason": "too close"},
+                {"ticker": "BURL", "reason": ""},
+            ],
+        )
 
     def test_score_prefers_industry_match(self):
         target = {"industry": "Apparel Retail", "sector": "Consumer Cyclical"}

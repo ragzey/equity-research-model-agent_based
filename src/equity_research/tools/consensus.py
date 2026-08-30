@@ -28,27 +28,64 @@ def _as_growth(value: Any) -> Optional[float]:
     return number
 
 
+def _as_eps(value: Any) -> Optional[float]:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number or number in (float("inf"), float("-inf")):
+        return None
+    if abs(number) > 1_000_000:
+        return None
+    return number
+
+
+def _column_preference(frame: Any) -> Optional[str]:
+    try:
+        columns = list(frame.columns)
+    except Exception:
+        return None
+    for column in ("+1y", "0y", "+1q"):
+        if column in columns:
+            return column
+    return None
+
+
+def _row_value(frame: Any, names: Tuple[str, ...], column: str) -> Optional[Any]:
+    lowered = {str(index).strip().lower(): index for index in getattr(frame, "index", [])}
+    for name in names:
+        if name in lowered:
+            try:
+                return frame.loc[lowered[name], column]
+            except Exception:
+                return None
+    return None
+
+
 def _growth_from_estimate_frame(frame: Any) -> Optional[float]:
     if frame is None:
         return None
     empty = getattr(frame, "empty", None)
     if empty:
         return None
-    try:
-        columns = list(frame.columns)
-    except Exception:
+    column = _column_preference(frame)
+    if not column:
         return None
-    preferred = [column for column in ("+1y", "0y", "+1q") if column in columns]
-    if not preferred:
-        return None
-    column = preferred[0]
-    for index_label in ("growth", "Growth"):
-        if index_label in getattr(frame, "index", []):
-            return _as_growth(frame.loc[index_label, column])
-    lowered = {str(index).strip().lower(): index for index in frame.index}
-    if "growth" in lowered:
-        return _as_growth(frame.loc[lowered["growth"], column])
-    return None
+    return _as_growth(_row_value(frame, ("growth",), column))
+
+
+def _eps_from_estimate_frame(frame: Any) -> Tuple[Optional[float], Optional[float]]:
+    if frame is None:
+        return None, None
+    empty = getattr(frame, "empty", None)
+    if empty:
+        return None, None
+    column = _column_preference(frame)
+    if not column:
+        return None, None
+    eps = _as_eps(_row_value(frame, ("avg", "average", "mean"), column))
+    growth = _as_growth(_row_value(frame, ("growth",), column))
+    return eps, growth
 
 
 def extract_consensus_growth(
@@ -63,18 +100,26 @@ def extract_consensus_growth(
     """
     clean = ticker.strip().upper()
     cached = cache_get("consensus", clean, TTL_CONSENSUS)
-    if isinstance(cached, dict):
+    if isinstance(cached, dict) and "forward_eps" in cached:
         return cached
 
     source = None
     growth = None
+    forward_eps = None
+    eps_growth = None
     try:
         stock = yf.Ticker(clean)
         growth = _growth_from_estimate_frame(getattr(stock, "revenue_estimate", None))
         if growth is not None:
             source = "yahoo_revenue_estimate_+1y"
+        try:
+            forward_eps, eps_growth = _eps_from_estimate_frame(
+                getattr(stock, "earnings_estimate", None)
+            )
+        except Exception:
+            logger.exception("Yahoo earnings_estimate unavailable for %s", clean)
     except Exception:
-        logger.exception("Yahoo revenue_estimate unavailable for %s", clean)
+        logger.exception("Yahoo estimate tables unavailable for %s", clean)
 
     if growth is None:
         growth = _as_growth((info or {}).get("revenueGrowth"))
@@ -89,6 +134,8 @@ def extract_consensus_growth(
             if source
             else None
         ),
+        "forward_eps": forward_eps,
+        "eps_growth": eps_growth,
     }
     cache_set("consensus", clean, result)
     return result

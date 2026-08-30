@@ -14,6 +14,7 @@ from ..prompts.desk import WRITER_SYSTEM, WRITER_USER
 from ..tools.pdf_memo import pdf_download_stem, write_memo_pdf
 from ..tools.report_pack import build_report_pack
 from ..tools.source_register import sources_markdown
+from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("LeadWriter")
@@ -129,7 +130,8 @@ def _valuation_exhibit(pack: Dict[str, Any]) -> str:
             )
         )
     takeaway = (
-        "The DCF range is the WACC / terminal-growth sensitivity grid. "
+        "The DCF range is the operational bear/base/bull cases when those "
+        "solve; otherwise it is the WACC / terminal-growth grid. "
         "Relative value re-rates trailing or implied EBITDA at the peer-median "
         "EV/EBITDA. Blended fair value is today's 70/30 mix when peers exist; "
         "the 12-month target compounds that value at the cost of equity."
@@ -269,6 +271,155 @@ def _operations_driver_table(packet: Dict[str, Any]) -> str:
     return body
 
 
+def _pnl_forecast_table(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return "Operating P&L forecast unavailable."
+    lines = [
+        "| Year | Stage | Revenue | EBIT | Margin | Net income | EPS | FCFF |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in rows:
+        lines.append(
+            "| {year} | {stage} | {revenue} | {ebit} | {margin} | {ni} | {eps} | {fcff} |".format(
+                year=row.get("year", "N/A"),
+                stage=row.get("stage") or "n/a",
+                revenue=_fmt_number(row.get("revenue")),
+                ebit=_fmt_number(row.get("ebit")),
+                margin=_fmt_percent(row.get("operating_margin")),
+                ni=_fmt_number(row.get("net_income")),
+                eps=_fmt_usd(row.get("eps")) if row.get("eps") is not None else "N/A",
+                fcff=_fmt_number(row.get("fcff")) if row.get("fcff") is not None else "—",
+            )
+        )
+    return "\n".join(lines)
+
+
+def _scenario_table(block: Dict[str, Any]) -> str:
+    raw = (block or {}).get("cases") or []
+    if isinstance(raw, dict):
+        cases = [
+            raw[name]
+            for name in ("bear", "base", "bull")
+            if isinstance(raw.get(name), dict)
+        ]
+    else:
+        cases = [case for case in raw if isinstance(case, dict)]
+    if not cases:
+        return "Operating scenarios unavailable."
+    lines = [
+        "| Case | Growth | Years | Terminal margin | STC | Terminal g | DCF / sh | 12m PT | Y1 EPS |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for case in cases:
+        lines.append(
+            "| {name} | {g} | {years} | {m} | {stc} | {tg} | {dcf} | {pt} | {eps} |".format(
+                name=str(case.get("name") or "").title(),
+                g=_fmt_percent(case.get("high_growth_rate")),
+                years=(
+                    case.get("high_growth_years")
+                    if case.get("high_growth_years") is not None
+                    else "N/A"
+                ),
+                m=_fmt_percent(case.get("terminal_margin")),
+                stc=_fmt_number(case.get("sales_to_capital"), 2),
+                tg=_fmt_percent(case.get("terminal_growth_rate")),
+                dcf=_fmt_usd(case.get("dcf_per_share")),
+                pt=_fmt_usd(case.get("price_target_12m")),
+                eps=_fmt_usd(case.get("year1_eps")),
+            )
+        )
+    note = str((block or {}).get("methodology") or "").strip()
+    extra = ""
+    if block.get("identical_to_base"):
+        extra = (
+            " Bear, base, and bull currently solve to the same value because "
+            "stretch labels were not unlocked."
+        )
+    return "\n".join(lines) + (f"\n\n*{note}{extra}*" if note or extra else "")
+
+
+def _catalyst_table(rows: List[Dict[str, Any]]) -> str:
+    if not rows:
+        return (
+            "No dated catalysts were on the ledger (Yahoo calendar or dated "
+            "10-K excerpts). Item 1A risks below are not a timing forecast."
+        )
+    lines = [
+        "| Date | Event | Assumption hit | What it does to the model | Source |",
+        "|---|---|---|---|---|",
+    ]
+    for row in rows:
+        lines.append(
+            "| {date} | {event} | {assumption} | {impact} | {source} |".format(
+                date=row.get("date_label") or row.get("date") or "n/a",
+                event=row.get("event") or "",
+                assumption=row.get("assumption") or "",
+                impact=" ".join(str(row.get("model_impact") or "").split()),
+                source=row.get("source") or "",
+            )
+        )
+    return "\n".join(lines)
+
+
+def _fmt_street_cell(value: Any, kind: str) -> str:
+    if value is None:
+        return "N/A"
+    if kind == "percent":
+        return _fmt_percent(value)
+    return _fmt_usd(value)
+
+
+def _street_table(block: Dict[str, Any]) -> str:
+    rows = (block or {}).get("rows") or []
+    if not rows or not (block or {}).get("has_street"):
+        return (
+            "Yahoo did not supply a usable analyst target, forward EPS, or +1y "
+            "revenue growth on this run. The thesis is the accepted DCF path only."
+        )
+    lines = [
+        "| Item | Model | Street | Gap | What the gap tests |",
+        "|---|---:|---:|---:|---|",
+    ]
+    for row in rows:
+        kind = str(row.get("kind") or "usd")
+        gap = row.get("gap")
+        if gap is None:
+            gap_text = "N/A"
+        elif kind == "percent":
+            gap_text = f"{float(gap):+.1%}"
+        else:
+            gap_text = f"{float(gap):+.1%}"
+        lines.append(
+            "| {item} | {model} | {street} | {gap} | {tests} |".format(
+                item=row.get("item") or "",
+                model=_fmt_street_cell(row.get("model"), kind),
+                street=_fmt_street_cell(row.get("street"), kind),
+                gap=gap_text,
+                tests=row.get("tests") or "",
+            )
+        )
+    n_analysts = block.get("n_analysts")
+    rec = block.get("recommendation_key")
+    note_bits = ["Yahoo analyst estimates, not management guidance."]
+    if n_analysts is not None:
+        note_bits.append(f"{int(n_analysts)} analysts on the target.")
+    if rec:
+        note_bits.append(f"Street recommendation key: {rec} (not this desk's band).")
+    return "\n".join(lines) + "\n\n*" + " ".join(note_bits) + "*"
+
+
+def _thesis_section(pack: Dict[str, Any], why: str) -> str:
+    thesis = pack.get("thesis") or {}
+    spine = str(thesis.get("spine") or "").strip()
+    why_text = str(why or "").strip()
+    if not spine and not why_text:
+        return "Thesis unavailable."
+    body = spine or ""
+    if why_text:
+        body = (body + "\n\n### Why this differs from Street\n\n" + why_text).strip()
+    return body
+
+
 def _wacc_appendix(summary: Dict[str, Any], state: EquityResearchState) -> str:
     inputs = summary.get("valuation_date_inputs") or {}
     classification = summary.get("firm_classification") or {}
@@ -354,17 +505,18 @@ def _projection_table(projections: List[Dict[str, Any]]) -> str:
     if not projections:
         return "Explicit DCF projections unavailable."
     lines = [
-        "| Year | Stage | Revenue | EBIT | NOPAT | Reinvestment | FCFF |",
-        "|---:|---|---:|---:|---:|---:|---:|",
+        "| Year | Stage | Revenue | EBIT | Model EPS | NOPAT | Reinvestment | FCFF |",
+        "|---:|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in projections:
         lines.append(
-            "| {year} | {stage} | {revenue} | {ebit} | {nopat} | "
+            "| {year} | {stage} | {revenue} | {ebit} | {eps} | {nopat} | "
             "{reinvestment} | {fcff} |".format(
                 year=row.get("year", "N/A"),
                 stage=row.get("stage", "N/A"),
                 revenue=_fmt_number(row.get("revenue")),
                 ebit=_fmt_number(row.get("ebit")),
+                eps=_fmt_usd(row.get("eps")) if row.get("eps") is not None else "N/A",
                 nopat=_fmt_number(row.get("nopat")),
                 reinvestment=_fmt_number(row.get("reinvestment")),
                 fcff=_fmt_number(row.get("fcff")),
@@ -444,7 +596,11 @@ def _desk_section(state: EquityResearchState) -> str:
     )
 
 
-def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -> Dict[str, str]:
+def _synthesize_narratives(
+    state: EquityResearchState,
+    frozen: Dict[str, Any],
+    pack: Dict[str, Any],
+) -> Dict[str, str]:
     industry = state.get("industry_outlook") or "Industry outlook unavailable."
     qualitative = state.get("qualitative_analysis_summary") or "Qualitative assessment unavailable."
     payload = chat_json(
@@ -473,6 +629,22 @@ def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -
                         indent=2,
                         default=str,
                     )[:4000],
+                    scenarios_json=json.dumps(
+                        pack.get("operating_scenarios") or {},
+                        indent=2,
+                        default=str,
+                    )[:3000],
+                    catalysts_json=json.dumps(
+                        pack.get("catalysts") or [],
+                        indent=2,
+                        default=str,
+                    )[:3000],
+                    street_json=json.dumps(
+                        pack.get("street") or {},
+                        indent=2,
+                        default=str,
+                    )[:3000],
+                    thesis_spine=str((pack.get("thesis") or {}).get("spine") or ""),
                 ),
             },
         ],
@@ -482,16 +654,28 @@ def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -
     desk_synthesis = str(payload.get("desk_synthesis") or "").strip()
     if not desk_synthesis:
         raise LLMCallError("Lead writer did not return a desk synthesis.")
+    if contains_web_link(desk_synthesis):
+        logger.warning("Lead writer desk synthesis contained a web link; dropped.")
+        desk_synthesis = (
+            "Writer synthesis contained a web link and was dropped. "
+            "See assumption decisions in Appendix C."
+        )
     packet_narrative = str(
         ((state.get("industry_macro_packet") or {}).get("narrative") or "")
     ).strip()
     writer_qual = str(payload.get("qualitative_narrative") or "").strip()
-    if "http://" in writer_qual.lower() or "https://" in writer_qual.lower():
+    if contains_web_link(writer_qual):
         writer_qual = ""
+    writer_thesis = str(payload.get("investment_thesis") or "").strip()
+    if contains_web_link(writer_thesis):
+        writer_thesis = ""
+    if len(writer_thesis) > 1200:
+        writer_thesis = writer_thesis[:1197].rsplit(" ", 1)[0] + "..."
     return {
         "industry_outlook": packet_narrative or industry,
         "qualitative_narrative": writer_qual or qualitative,
         "desk_synthesis": desk_synthesis,
+        "investment_thesis": writer_thesis,
     }
 
 
@@ -607,6 +791,19 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
         "nwc_to_sales": ((state.get("operations_packet") or {}).get("metrics") or {}).get(
             "nwc_to_sales"
         ),
+        "year1_eps": pack.get("year1_eps"),
+        "street_target_mean": (pack.get("street") or {}).get("target_mean"),
+        "street_forward_eps": next(
+            (
+                row.get("street")
+                for row in ((pack.get("street") or {}).get("rows") or [])
+                if row.get("item") == "Year-1 EPS"
+            ),
+            None,
+        ),
+        "thesis_headline": (pack.get("thesis") or {}).get("headline"),
+        "bear_price_target": (pack.get("operating_scenarios") or {}).get("bear_pt"),
+        "bull_price_target": (pack.get("operating_scenarios") or {}).get("bull_pt"),
         "valuation_signal": _valuation_signal(
             inputs.get("share_price"),
             raw_intrinsic,
@@ -614,7 +811,7 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
         ),
         "is_math_verified": bool(state.get("is_math_verified")),
     }
-    narratives = _synthesize_narratives(state, frozen)
+    narratives = _synthesize_narratives(state, frozen, pack)
     desk_synthesis = narratives["desk_synthesis"]
     desk_synthesis_md = (
         f"\n\n### Writer synthesis\n\n{desk_synthesis}" if desk_synthesis else ""
@@ -641,6 +838,16 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
 > and is not investment advice.
 
 {_exec_summary(pack, qualitative_lead)}
+## Investment thesis
+
+{_thesis_section(pack, narratives.get("investment_thesis") or "")}
+
+## Model versus Street
+
+The table is Yahoo consensus versus the accepted model. Gaps are the thesis; they are not a recommendation.
+
+{_street_table(pack.get("street") or {})}
+
 ## Key data
 
 - Firm classification: {classification.get("firm_type", "N/A")}
@@ -671,9 +878,23 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
 
 {_filing_evidence(state)}
 
+## Operating forecast
+
+Last-reported revenue, EBIT, net income, and EPS are from the same fiscal period as the DCF baseline when the statements carry them (stage reported). Forecast years are model P&L from the accepted labels: interest is held at last-reported expense, tax is the statutory 21% rate, and EPS is model NI / diluted shares — not GAAP or Street EPS. FCFF is still unlevered (NOPAT − reinvestment) and is the input to WACC.
+
+{_pnl_forecast_table(pack.get("pnl_forecast") or [])}
+
+{str(pack.get("pnl_method") or dcf.get("pnl_method") or "")}
+
 ## Discounted cash flow
 
-The primary value is a three-stage FCFF DCF. High-growth lasts {applied.get("high_growth_years", "n/a")} years at {_fmt_percent(applied.get("high_growth_rate"))}, then fades over {applied.get("transition_years", "n/a")} years to a {_fmt_percent(applied.get("terminal_margin"))} terminal EBIT margin and {_fmt_percent(applied.get("terminal_growth_rate"))} perpetuity growth. Reinvestment uses a {_fmt_number(applied.get("sales_to_capital"), 2)} sales-to-capital ratio (ΔRevenue / Δ invested capital, including working capital). Discounting at a {_fmt_percent(state.get("discount_rate"))} WACC produces {_fmt_usd(pack.get("dcf_value"))} per share. Raw model equity value before the limited-liability display floor is {_fmt_usd(raw_intrinsic)}.
+The primary value is a three-stage FCFF DCF built from that P&L. High-growth lasts {applied.get("high_growth_years", "n/a")} years at {_fmt_percent(applied.get("high_growth_rate"))}, then fades over {applied.get("transition_years", "n/a")} years to a {_fmt_percent(applied.get("terminal_margin"))} terminal EBIT margin and {_fmt_percent(applied.get("terminal_growth_rate"))} perpetuity growth. Reinvestment uses a {_fmt_number(applied.get("sales_to_capital"), 2)} sales-to-capital ratio (ΔRevenue / Δ invested capital, including working capital). Discounting at a {_fmt_percent(state.get("discount_rate"))} WACC produces {_fmt_usd(pack.get("dcf_value"))} per share. Raw model equity value before the limited-liability display floor is {_fmt_usd(raw_intrinsic)}.
+
+## Operating scenarios
+
+The published rating uses the reviewer-accepted base path. Bear / base / bull change only operating menu labels still on the evidence-gated allow-list. WACC and the peer EV/EBITDA cross-check stay on the base case.
+
+{_scenario_table(pack.get("operating_scenarios") or {})}
 
 ## Comparables
 
@@ -683,13 +904,17 @@ Peer-median EV/EBITDA is the market cross-check ({relative_method}). When availa
 
 {_peer_table(state.get("peer_comparison_matrix") or {})}
 
-## Risks, catalysts and model band
+## Catalysts and model band
 
-The model band is **{rating}** because the 12-month price target of {_fmt_usd(pack.get("price_target_12m"))} is {_fmt_percent(pack.get("upside_to_pt"))} versus the last price, using a ±15% initiation convention. Principal modelled risks:
+The model band is **{rating}** because the 12-month price target of {_fmt_usd(pack.get("price_target_12m"))} is {_fmt_percent(pack.get("upside_to_pt"))} versus the last price, using a ±15% initiation convention. Each dated item below is mapped to the assumption it tests. Dates come from Yahoo or the 10-K ledger; none are invented.
+
+{_catalyst_table(pack.get("catalysts") or [])}
+
+Principal modelled risks from the qualitative packet:
 
 {risk_md}
 
-Value is most sensitive to WACC and terminal growth (grid below). A higher beta, a lower terminal margin, or a missing peer cross-check would move the blended value. This section is a model disclosure, not a recommendation.
+WACC and perpetuity growth still matter (grid below). Operating bull/bear is the research scenario set. This section is a model disclosure, not a recommendation.
 {_cash_flow_warning(findings)}
 
 ## WACC / terminal-growth sensitivity
@@ -699,7 +924,7 @@ Value is most sensitive to WACC and terminal growth (grid below). A higher beta,
 ## Appendix A — WACC build-up
 
 {_wacc_appendix(summary, state)}
-## Appendix B — Explicit FCFF projections
+## Appendix B — Explicit P&L and FCFF projections
 
 {_projection_table(dcf.get("projections") or [])}
 
@@ -725,7 +950,10 @@ Value is most sensitive to WACC and terminal growth (grid below). A higher beta,
 - Harvested ISIN candidates: {", ".join(state.get("discovered_bond_isins") or []) or "none"}.
 - Damodaran default spreads come from a dated local snapshot, not a live HTML scrape.
 - Terminal-value concentration and scenario sensitivity require analyst review.
-- The 12-month price target rolls today's fair value forward at the cost of equity; it is not a catalyst or timing forecast.
+- The 12-month price target rolls today's fair value forward at the cost of equity; dated catalysts above test whether that path is on track, they do not replace it.
+- Model EPS holds last-reported interest constant and uses the statutory tax rate; it is not a GAAP or Street estimate.
+- Street targets and forward EPS come from Yahoo analyst fields on the ledger; they are not invented and they do not replace the DCF.
+- Operating bull/bear cases only use menu labels on the evidence-gated allow-list; the published rating is the accepted base path.
 - The FCFF framework is not used for financial-services firms.
 - The model band is not an independently verified Buy/Hold/Sell recommendation.
 

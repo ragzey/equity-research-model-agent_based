@@ -1,15 +1,16 @@
-"""Generate a serializable DCF sensitivity grid after Quant review."""
+"""Generate DCF sensitivity and operational bull/base/bear after Quant review."""
 
 from typing import Any, Dict
 
 from ..graphs.state import EquityResearchState
+from ..tools.operating_scenarios import build_operating_scenarios
 from ..tools.valuation import build_dcf_sensitivity_grid
 
 
 def sensitivity_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
-    """Build a 5x5 WACC/g matrix when a complete valuation is available."""
+    """Build a 5x5 WACC/g matrix and operating scenarios when valuation is verified."""
     if not state.get("is_math_verified"):
-        return {"valuation_sensitivity": None}
+        return {"valuation_sensitivity": None, "operating_scenarios": None}
 
     summary = state.get("valuation_summary") or {}
     assumptions = summary.get("applied_dcf_assumptions") or {}
@@ -46,4 +47,5 @@ def sensitivity_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         terminal_margin=assumptions["terminal_margin"],
         stable_sales_to_capital=assumptions["stable_sales_to_capital"],
     )
-    return {"valuation_sensitivity": grid}
+    scenarios = build_operating_scenarios(state)
+    return {"valuation_sensitivity": grid, "operating_scenarios": scenarios}

@@ -12,7 +12,7 @@ from ..tools.cache import TTL_TREASURY, cache_get, cache_set
 from ..tools.debt_analysis import calculate_cost_of_debt, extract_ebit_and_interest
 from ..tools.firm_classifier import (
     classify_firm_and_adjust_assumptions,
-    extract_operating_baseline,
+    extract_operating_pnl_anchor,
 )
 from ..tools.assumption_menus import clip_terminal_growth
 from ..tools.operating_cycle import clip_sales_to_capital
@@ -221,9 +221,28 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         stable_fallback,
     )
 
-    base_revenue, base_ebit = extract_operating_baseline(income_statement)
+    anchor = extract_operating_pnl_anchor(income_statement)
+    base_revenue = float(anchor["revenue"])
+    base_ebit = float(anchor["ebit"])
+    base_net_income = anchor.get("net_income")
+    reported_eps = anchor.get("reported_eps")
+    if reported_eps is not None:
+        base_eps = reported_eps
+        base_eps_basis = "statement"
+    elif base_net_income is not None:
+        base_eps = base_net_income / shares
+        base_eps_basis = "ni_per_share"
+    else:
+        base_eps = None
+        base_eps_basis = None
     total_debt, cash, cash_missing = extract_debt_and_cash(balance_sheet)
-    ebit, interest_expense = extract_ebit_and_interest(income_statement)
+    ebit_icr, interest_icr = extract_ebit_and_interest(income_statement)
+    interest_expense = (
+        anchor.get("interest_expense")
+        if anchor.get("interest_expense") is not None
+        else interest_icr
+    )
+    ebit = base_ebit if base_ebit is not None else ebit_icr
     outstanding_bonds = state.get("outstanding_bonds") or []
 
     if total_debt == 0 and not outstanding_bonds:
@@ -279,6 +298,7 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         terminal_margin=terminal_margin,
         stable_sales_to_capital=stable_sales_to_capital,
         marginal_tax_rate=MARGINAL_TAX_RATE,
+        interest_expense=float(interest_expense or 0.0),
     )
 
     summary = dict(state.get("valuation_summary") or {})
@@ -308,6 +328,11 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
             "applied_dcf_assumptions": {
                 "base_revenue": base_revenue,
                 "base_ebit": base_ebit,
+                "base_net_income": base_net_income,
+                "base_eps": base_eps,
+                "base_eps_basis": base_eps_basis,
+                "base_period": anchor.get("period_label"),
+                "interest_expense": float(interest_expense or 0.0),
                 "high_growth_years": high_growth_years,
                 "transition_years": assumptions["transition_years"],
                 "terminal_margin": terminal_margin,

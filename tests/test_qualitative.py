@@ -2,7 +2,9 @@
 
 import unittest
 
-from equity_research.agents.qualitative import _deterministic_summary
+from unittest.mock import patch
+
+from equity_research.agents.qualitative import _deterministic_summary, qualitative_analyst_node
 from equity_research.agents.valuation_router import (
     route_valuation_method,
     unsupported_financial_node,
@@ -56,6 +58,23 @@ class QualitativeTests(unittest.TestCase):
             "",
         )
         self.assertIn("[Item 1A]", summary)
+
+    @patch("equity_research.agents.qualitative.chat_text")
+    def test_url_in_llm_summary_falls_back_to_evidence(self, mock_chat):
+        mock_chat.return_value = (
+            "1. REGULATORY & LITIGATION RISK\n"
+            "- See www.example.com/10k for the lawsuit.\n"
+        )
+        state = initial_state("TEST", "2026")
+        state["sec_filing_sections"] = {
+            "item_1a": "A supply chain disruption could materially affect operations.",
+            "item_7": "",
+        }
+        result = qualitative_analyst_node(state)
+        summary = result["qualitative_analysis_summary"]
+        self.assertNotIn("www.", summary.lower())
+        self.assertIn("[Item 1A]", summary)
+        self.assertTrue(result["qualitative_evidence"])
 
     def test_missing_item_1a_does_not_relabel_item_7(self):
         payload = sourced_filing_payload(

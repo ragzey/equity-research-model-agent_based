@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("ValuationTool")
 
@@ -70,8 +70,10 @@ def project_3stage_fcff(
     terminal_margin: float = 0.15,
     stable_sales_to_capital: float = 2.0,
     marginal_tax_rate: float = 0.21,
+    interest_expense: float = 0.0,
+    shares_outstanding: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
-    """Project FCFF using revenue growth and incremental sales-to-capital needs."""
+    """Project the operating P&L first, then unlevered FCFF from NOPAT − reinvestment."""
     revenue = _require_finite("base_revenue", base_revenue)
     ebit = _require_finite("base_ebit", base_ebit)
     initial_stc = _require_finite("sales_to_capital", sales_to_capital)
@@ -93,6 +95,12 @@ def project_3stage_fcff(
         raise ValueError("Marginal tax rate must be between 0 and 1.")
     if growth <= -1 or stable_growth <= -1:
         raise ValueError("Growth rates must exceed -100%.")
+    interest = max(0.0, _require_finite("interest_expense", interest_expense))
+    shares = None
+    if shares_outstanding is not None:
+        shares = _require_finite("shares_outstanding", shares_outstanding)
+        if shares <= 0:
+            shares = None
 
     initial_margin = ebit / revenue
     projections: List[Dict[str, Any]] = []
@@ -119,21 +127,28 @@ def project_3stage_fcff(
         revenue_change = current_revenue - prior_revenue
         reinvestment = revenue_change / year_stc
         fcff = nopat - reinvestment
-
-        projections.append(
-            {
-                "year": year,
-                "stage": stage,
-                "growth_rate": year_growth,
-                "revenue": current_revenue,
-                "operating_margin": margin,
-                "ebit": projected_ebit,
-                "nopat": nopat,
-                "sales_to_capital": year_stc,
-                "reinvestment": reinvestment,
-                "fcff": fcff,
-            }
-        )
+        ebt = projected_ebit - interest
+        tax = ebt * tax_rate
+        net_income = ebt - tax
+        row: Dict[str, Any] = {
+            "year": year,
+            "stage": stage,
+            "growth_rate": year_growth,
+            "revenue": current_revenue,
+            "operating_margin": margin,
+            "ebit": projected_ebit,
+            "interest_expense": interest,
+            "ebt": ebt,
+            "tax": tax,
+            "net_income": net_income,
+            "nopat": nopat,
+            "sales_to_capital": year_stc,
+            "reinvestment": reinvestment,
+            "fcff": fcff,
+        }
+        if shares is not None:
+            row["eps"] = net_income / shares
+        projections.append(row)
 
     return projections
 
@@ -154,6 +169,7 @@ def perform_3stage_dcf_valuation(
     terminal_margin: float = 0.15,
     stable_sales_to_capital: float = 2.0,
     marginal_tax_rate: float = 0.21,
+    interest_expense: float = 0.0,
 ) -> Dict[str, Any]:
     """Run a three-stage enterprise DCF with annual, transitioning discount rates."""
     initial_wacc = _require_finite("wacc", wacc)
@@ -187,6 +203,8 @@ def perform_3stage_dcf_valuation(
         terminal_margin=terminal_margin,
         stable_sales_to_capital=stable_sales_to_capital,
         marginal_tax_rate=marginal_tax_rate,
+        interest_expense=interest_expense,
+        shares_outstanding=shares,
     )
 
     cumulative_discount_factor = 1.0
@@ -242,6 +260,13 @@ def perform_3stage_dcf_valuation(
         "terminal_wacc_applied": mature_wacc,
         "terminal_growth_rate_applied": terminal_growth,
         "terminal_incremental_roc_implied": implied_incremental_roc,
+        "pnl_method": (
+            "Revenue grows at the labeled high-growth then transition rates. "
+            "EBIT is revenue × the stage operating margin. Model net income is "
+            "EBIT minus last-reported interest expense, taxed at the statutory "
+            "marginal rate. FCFF stays unlevered: NOPAT minus reinvestment. "
+            "Model EPS is model NI / diluted shares, not Street EPS."
+        ),
     }
 
 

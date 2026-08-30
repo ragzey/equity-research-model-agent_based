@@ -138,6 +138,43 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
             )
         )
 
+    street = state.get("street_snapshot") or {}
+    info = state.get("market_info") or {}
+    if (
+        street.get("target_mean")
+        or street.get("forward_eps")
+        or street.get("n_analysts")
+        or info.get("targetMeanPrice")
+        or info.get("forwardEps")
+    ):
+        n_analysts = street.get("n_analysts")
+        rows.append(
+            _row(
+                "Street consensus",
+                (
+                    "Yahoo targetMeanPrice, forwardEps, and analyst count"
+                    + (f" ({int(n_analysts)} analysts)" if n_analysts is not None else "")
+                    + ". Not management guidance."
+                ),
+                "Yahoo Finance",
+                "",
+                "Model versus Street table and thesis spine",
+            )
+        )
+
+    calendar = state.get("event_calendar") or []
+    filing_date = (state.get("sec_filing_metadata") or {}).get("filing_date")
+    if calendar or filing_date:
+        rows.append(
+            _row(
+                "Event calendar",
+                "Yahoo earnings and dividend timestamps plus dated 10-K excerpts.",
+                "Yahoo Finance / SEC 10-K ledger",
+                "",
+                "Catalyst register (dates are not invented)",
+            )
+        )
+
     bonds = state.get("outstanding_bonds") or []
     method = str(cost_of_debt.get("method_used") or "")
     method_l = method.lower()
@@ -203,9 +240,10 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
         _row(
             "Valuation math",
             (
-                "WACC, three-stage FCFF, 70/30 blend, 12-month price target, "
-                "and ±15% model band are computed in Python. The LLM is not a "
-                "source for those figures."
+                "WACC, three-stage FCFF from the operating P&L, 70/30 blend, "
+                "12-month price target, operating bull/base/bear, and ±15% "
+                "model band are computed in Python. The LLM is not a source "
+                "for those figures."
             ),
             "equity_research.tools.valuation / report_pack",
             "",

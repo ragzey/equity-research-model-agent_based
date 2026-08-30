@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .consensus import blend_high_growth_rate
 from .firm_classifier import (
@@ -12,6 +12,7 @@ from .firm_classifier import (
 )
 from .operating_cycle import clip_sales_to_capital, measure_operating_cycle
 from .qual_to_quant import generate_valuation_overrides
+from ..utils.grounding import contains_web_link
 
 TERMINAL_GROWTH_FLOOR = 0.015
 TERMINAL_GROWTH_HARD_CAP = 0.05
@@ -24,6 +25,15 @@ TERMINAL_GROWTH_CHOICES = ("low", "base", "high")
 MARGIN_CHOICES = ("baseline", "proposed")
 CSRP_CHOICES = ("none", "proposed")
 STC_CHOICES = ("heavy", "base", "light")
+# Missing allow-list → never reopen stretch labels from live packets.
+CONSERVATIVE_LABELS: Dict[str, Tuple[str, ...]] = {
+    "high_growth_rate": ("low", "base"),
+    "high_growth_years": ("compress", "base"),
+    "terminal_growth_rate": ("low", "base"),
+    "terminal_margin": ("baseline",),
+    "company_specific_risk_premium": ("none",),
+    "sales_to_capital": ("base",),
+}
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
@@ -191,6 +201,24 @@ def _reason_numbers_in_ledger(reason: str, ledger: str) -> bool:
         if not re.search(pattern, haystack):
             return False
     return True
+
+
+def stable_sales_to_capital_for_label(
+    label: str,
+    high_growth_stc: float,
+    baseline_stable: Optional[float] = None,
+) -> float:
+    """Map a reinvestment label onto stable sales-to-capital. Same rule as the architect."""
+    stc = float(high_growth_stc)
+    stable = clip_sales_to_capital(
+        max(stc, float(baseline_stable if baseline_stable is not None else stc)),
+        stc,
+    )
+    if label == "heavy":
+        return clip_sales_to_capital(stc * 1.10, stc)
+    if label == "light":
+        return clip_sales_to_capital(stc * 1.05, stc)
+    return stable
 
 
 def resolve_labeled_choice(
@@ -453,10 +481,21 @@ def apply_architect_choices(
         menu = menus.get(menu_name) or {}
         if not menu:
             continue
-        permitted: Iterable[str] = allowed.get(key) or list(menu.keys())
+        if key in allowed:
+            permitted = [
+                str(item) for item in (allowed.get(key) or []) if str(item) in menu
+            ]
+        else:
+            permitted = [
+                label
+                for label in CONSERVATIVE_LABELS.get(key, (default,))
+                if label in menu
+            ]
+        if not permitted:
+            permitted = [default] if default in menu else list(menu.keys())[:1]
         label = resolve_labeled_choice(choices.get(key), list(permitted), default=default)
         reason = str(notes.get(key) or "").strip()
-        if "http://" in reason.lower() or "https://" in reason.lower():
+        if contains_web_link(reason):
             reason = ""
         if label in needs_reason and (
             not reason or not _reason_numbers_in_ledger(reason, ledger_text)
@@ -478,14 +517,11 @@ def apply_architect_choices(
         if key == "high_growth_years":
             rationales["high_growth_horizon"] = rationales[key]
         if key == "sales_to_capital":
-            stable = clip_sales_to_capital(
-                max(float(proposed[key]), float(baseline.get("stable_sales_to_capital") or proposed[key])),
-                proposed[key],
+            stable = stable_sales_to_capital_for_label(
+                label,
+                float(proposed[key]),
+                baseline.get("stable_sales_to_capital"),
             )
-            if label == "heavy":
-                stable = clip_sales_to_capital(proposed[key] * 1.10, proposed[key])
-            elif label == "light":
-                stable = clip_sales_to_capital(proposed[key] * 1.05, proposed[key])
             proposed["stable_sales_to_capital"] = stable
             rationales["stable_sales_to_capital"] = (
                 f"Stable sales-to-capital {stable:.2f} follows the '{label}' "

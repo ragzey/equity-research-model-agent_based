@@ -6,6 +6,8 @@ from typing import Any, Dict, List
 from ..graphs.state import EquityResearchState
 from ..tools.bond_identifiers import extract_bond_isins, merge_isin_lists
 from ..tools.consensus import extract_consensus_growth
+from ..tools.catalysts import extract_market_events
+from ..tools.street import extract_street_snapshot
 from ..tools.finnhub_bond import get_outstanding_bonds_for_ticker
 from ..tools.firm_classifier import is_financial_services_firm
 from ..tools.market_api import fetch_financial_statements
@@ -36,15 +38,20 @@ def aggregator_node(state: EquityResearchState) -> Dict[str, Any]:
         updates["balance_sheet"] = financials["balance_sheet"]
         updates["cash_flow_statement"] = financials["cash_flow_statement"]
         updates["market_info"] = info or None
+        updates["event_calendar"] = extract_market_events(info) or None
         logger.info("Saved income, balance, and cash-flow statements to ledger.")
     else:
         logger.error("Market API returned no financial statements for %s.", ticker)
+        updates["event_calendar"] = None
 
     try:
-        updates["consensus_growth"] = extract_consensus_growth(ticker, info)
+        consensus = extract_consensus_growth(ticker, info)
+        updates["consensus_growth"] = consensus
+        updates["street_snapshot"] = extract_street_snapshot(info, consensus)
     except Exception:
-        logger.exception("Consensus growth overlay unavailable for %s", ticker)
+        logger.exception("Consensus / Street overlay unavailable for %s", ticker)
         updates["consensus_growth"] = None
+        updates["street_snapshot"] = None
 
     is_financial = is_financial_services_firm(info)
     updates["is_financial"] = is_financial

@@ -182,7 +182,7 @@ function renderCharts(pack) {
     ? `<figure>
         <figcaption>Exhibit 1 · Valuation versus the market</figcaption>
         <canvas id="chart-valuation"></canvas>
-        <p class="chart-note">DCF range from the WACC/g grid. Dashed line is the last price. ${escapeHtml(pack.pt_method || "")}</p>
+        <p class="chart-note">DCF range from operating bear/base/bull when those solve; otherwise the WACC/g grid. Dashed line is the last price. ${escapeHtml(pack.pt_method || "")}</p>
       </figure>`
     : "";
   const marketFigure =
@@ -243,22 +243,8 @@ function renderSources(pack) {
 
 function renderAssumptions(pack) {
   const rows = pack.assumptions || [];
-  if (!rows.length) {
-    $("#panel-assumptions").innerHTML = "<p class='hint'>No assumption register on this note.</p>";
-    return;
-  }
-  const body = rows
-    .map(
-      (row) => `
-      <tr>
-        <td>${escapeHtml(row.item || "")}</td>
-        <td>${escapeHtml(row.value || "")}</td>
-        <td>${escapeHtml(row.justification || "")}</td>
-        <td>${escapeHtml(row.source || "")}</td>
-      </tr>`
-    )
-    .join("");
-  $("#panel-assumptions").innerHTML = `
+  const table = rows.length
+    ? `
     <table class="assumptions">
       <thead>
         <tr>
@@ -266,6 +252,171 @@ function renderAssumptions(pack) {
           <th>Value</th>
           <th>Justification</th>
           <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>${rows
+        .map(
+          (row) => `
+      <tr>
+        <td>${escapeHtml(row.item || "")}</td>
+        <td>${escapeHtml(row.value || "")}</td>
+        <td>${escapeHtml(row.justification || "")}</td>
+        <td>${escapeHtml(row.source || "")}</td>
+      </tr>`
+        )
+        .join("")}</tbody>
+    </table>`
+    : "";
+  const extras =
+    renderThesisBlock(pack) +
+    renderStreetBlock(pack) +
+    renderPnlBlock(pack) +
+    renderScenarioBlock(pack) +
+    renderCatalystBlock(pack);
+  if (!table && !extras) {
+    $("#panel-assumptions").innerHTML =
+      "<p class='hint'>No assumption register on this note.</p>";
+    return;
+  }
+  $("#panel-assumptions").innerHTML = table + extras;
+}
+
+function fmtQty(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "—";
+  return number.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function renderThesisBlock(pack) {
+  const thesis = pack.thesis || {};
+  const spine = thesis.spine;
+  if (!spine) return "";
+  return `
+    <h2>Investment thesis</h2>
+    <p class="chart-note">${escapeHtml(spine)}</p>
+  `;
+}
+
+function renderStreetBlock(pack) {
+  const block = pack.street || {};
+  const rows = block.rows || [];
+  if (!rows.length || !block.has_street) return "";
+  const body = rows
+    .map((row) => {
+      const kind = row.kind || "usd";
+      const model =
+        kind === "percent" ? fmtPct(row.model) : fmtUsd(row.model);
+      const street =
+        kind === "percent" ? fmtPct(row.street) : fmtUsd(row.street);
+      return `<tr>
+        <td>${escapeHtml(row.item || "")}</td>
+        <td>${model}</td>
+        <td>${street}</td>
+        <td>${fmtSignedPct(row.gap)}</td>
+        <td>${escapeHtml(row.tests || "")}</td>
+      </tr>`;
+    })
+    .join("");
+  const nCount = Number(block.n_analysts);
+  const n = Number.isFinite(nCount)
+    ? ` ${escapeHtml(String(Math.round(nCount)))} analysts.`
+    : "";
+  return `
+    <h2>Model versus Street</h2>
+    <p class="chart-note">Yahoo consensus versus the accepted model.${n} Gaps are the thesis, not a recommendation.</p>
+    <table class="assumptions">
+      <thead>
+        <tr>
+          <th>Item</th><th>Model</th><th>Street</th><th>Gap</th><th>Tests</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
+function renderPnlBlock(pack) {
+  const rows = pack.pnl_forecast || [];
+  if (!rows.length) return "";
+  const body = rows
+    .map((row) => `<tr>
+        <td>${escapeHtml(String(row.year != null ? row.year : ""))}</td>
+        <td>${escapeHtml(row.stage || "")}</td>
+        <td>${fmtQty(row.revenue)}</td>
+        <td>${fmtQty(row.ebit)}</td>
+        <td>${fmtPct(row.operating_margin)}</td>
+        <td>${fmtQty(row.net_income)}</td>
+        <td>${fmtUsd(row.eps)}</td>
+        <td>${row.fcff == null ? "—" : fmtQty(row.fcff)}</td>
+      </tr>`)
+    .join("");
+  return `
+    <h2>Operating forecast</h2>
+    <p class="chart-note">Last-reported NI/EPS are from the same fiscal period as DCF revenue/EBIT (statement diluted EPS when present, otherwise NI / shares). Forecast EPS is model NI / shares, not Street EPS. FCFF stays unlevered.</p>
+    <table class="assumptions">
+      <thead>
+        <tr>
+          <th>Year</th><th>Stage</th><th>Revenue</th><th>EBIT</th><th>Margin</th><th>Net income</th><th>EPS</th><th>FCFF</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
+function renderScenarioBlock(pack) {
+  const block = pack.operating_scenarios || {};
+  const cases = block.cases || [];
+  if (!cases.length) return "";
+  const rows = cases
+    .map((row) => {
+      const labels = Object.values(row.labels || {}).join(" / ");
+      return `<tr>
+        <td>${escapeHtml(String(row.name || "").toUpperCase())}</td>
+        <td>${fmtPct(row.high_growth_rate)}</td>
+        <td>${escapeHtml(row.high_growth_years != null ? String(row.high_growth_years) : "—")}</td>
+        <td>${fmtUsd(row.dcf_per_share)}</td>
+        <td>${fmtUsd(row.price_target_12m)}</td>
+        <td>${fmtUsd(row.year1_eps)}</td>
+        <td>${escapeHtml(labels)}</td>
+      </tr>`;
+    })
+    .join("");
+  return `
+    <h2>Operating scenarios</h2>
+    <p class="chart-note">${escapeHtml(block.methodology || "Bear/base/bull from operating menus. WACC held.")}</p>
+    <table class="assumptions">
+      <thead>
+        <tr>
+          <th>Case</th><th>Growth</th><th>Years</th><th>DCF</th><th>12m PT</th><th>Y1 EPS</th><th>Labels</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function renderCatalystBlock(pack) {
+  const rows = pack.catalysts || [];
+  if (!rows.length) return "";
+  const body = rows
+    .map(
+      (row) => `<tr>
+        <td>${escapeHtml(row.date_label || row.date || "")}</td>
+        <td>${escapeHtml(row.event || "")}</td>
+        <td>${escapeHtml(row.assumption || "")}</td>
+        <td>${escapeHtml(row.model_impact || "")}</td>
+        <td>${escapeHtml(row.source || "")}</td>
+      </tr>`
+    )
+    .join("");
+  return `
+    <h2>Dated catalysts</h2>
+    <table class="assumptions">
+      <thead>
+        <tr>
+          <th>Date</th><th>Event</th><th>Assumption</th><th>Model impact</th><th>Source</th>
         </tr>
       </thead>
       <tbody>${body}</tbody>
@@ -313,6 +464,16 @@ function renderSummary(summary) {
     <div class="cover-cell"><span>Share price</span><strong>${fmtUsd(pack.share_price != null ? pack.share_price : summary.share_price)}</strong></div>
     <div class="cover-cell"><span>Upside to PT</span><strong>${fmtSignedPct(pack.upside_to_pt)}</strong></div>
     <div class="cover-cell"><span>Fair value</span><strong>${fmtUsd(pack.fair_value)}</strong></div>
+    ${
+      pack.operating_scenarios && pack.operating_scenarios.bear_pt != null
+        ? `<div class="cover-cell"><span>Bear / bull PT</span><strong>${fmtUsd(pack.operating_scenarios.bear_pt)} / ${fmtUsd(pack.operating_scenarios.bull_pt)}</strong></div>`
+        : ""
+    }
+    ${
+      pack.street && pack.street.target_mean != null
+        ? `<div class="cover-cell"><span>Street mean PT</span><strong>${fmtUsd(pack.street.target_mean)}</strong></div>`
+        : ""
+    }
     <p class="disclaimer">${escapeHtml(pack.model_rating_note || "Model output only; not an investment recommendation.")}</p>
   `
     : `<p class="disclaimer">Financial-services firms are out of scope for this FCFF model.</p>`;
@@ -322,6 +483,8 @@ function renderSummary(summary) {
     <div class="metric"><span>DCF</span><strong>${fmtUsd(pack.dcf_value != null ? pack.dcf_value : summary.display_value)}</strong></div>
     <div class="metric"><span>Relative EV/EBITDA</span><strong>${fmtUsd(pack.relative_value)}</strong></div>
     <div class="metric"><span>WACC</span><strong>${fmtPct(summary.wacc)}</strong></div>
+    <div class="metric"><span>Y1 model EPS</span><strong>${fmtUsd(pack.year1_eps)}</strong></div>
+    <div class="metric"><span>vs Street PT</span><strong>${fmtSignedPct(pack.street && pack.street.pt_gap != null ? pack.street.pt_gap : null)}</strong></div>
     <div class="metric"><span>vs price (FV)</span><strong>${fmtSignedPct(pack.upside_to_fair_value != null ? pack.upside_to_fair_value : summary.gap)}</strong></div>
   `
     : "";

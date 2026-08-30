@@ -33,8 +33,10 @@ def build_research_graph():
     and operations then run in parallel: demand/cycle versus CCC, working capital,
     and reinvestment. On the FCFF path the assumption architect picks bounded
     menu labels; the reviewer only accepts or rejects. Quant remains Python for
-    WACC and FCFF. The auditor may correct narrative and clip invented tickers;
-    it may not rewrite DCF or WACC.
+    WACC, the operating P&L, and FCFF.     Sensitivity adds operational bear/base/bull
+    from the same menus. The writer puts a Python thesis and Street table on
+    the memo. The auditor may correct narrative and clip invented
+    tickers; it may not rewrite DCF or WACC.
     """
     workflow = StateGraph(EquityResearchState)
     workflow.add_node("aggregator", aggregator_node)

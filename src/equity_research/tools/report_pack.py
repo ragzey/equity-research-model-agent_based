@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from .catalysts import build_catalyst_register
+from .operating_scenarios import scenario_dcf_range
 from .source_register import build_source_register
+from .street import build_thesis_pack
 
 # Same 70/30 split as a standard initiation that treats DCF as primary
 # and peer EV/EBITDA as the market cross-check.
@@ -570,6 +573,38 @@ def _key_data_rows(pack: Dict[str, Any]) -> List[Dict[str, str]]:
         {"label": "Cost of equity", "value": _fmt_pct(pack.get("cost_of_equity"))},
         {"label": "Terminal growth", "value": _fmt_pct(pack.get("terminal_growth"))},
         {"label": "Peer median EV/EBITDA", "value": _fmt_multiple(pack.get("peer_median_ev_ebitda"))},
+        {"label": "Year-1 model EPS", "value": _fmt_usd(pack.get("year1_eps"))},
+        {
+            "label": "Street mean 12-month PT",
+            "value": _fmt_usd((pack.get("street") or {}).get("target_mean")),
+        },
+        {
+            "label": "Street forward EPS",
+            "value": _fmt_usd(
+                next(
+                    (
+                        row.get("street")
+                        for row in ((pack.get("street") or {}).get("rows") or [])
+                        if row.get("item") == "Year-1 EPS"
+                    ),
+                    None,
+                )
+            ),
+        },
+        {
+            "label": "Model vs Street PT",
+            "value": _fmt_pct((pack.get("street") or {}).get("pt_gap")),
+        },
+        {
+            "label": "Operating scenarios (PT)",
+            "value": (
+                f"Bear {_fmt_usd((pack.get('operating_scenarios') or {}).get('bear_pt'))} · "
+                f"Base {_fmt_usd(pack.get('price_target_12m'))} · "
+                f"Bull {_fmt_usd((pack.get('operating_scenarios') or {}).get('bull_pt'))}"
+                if pack.get("operating_scenarios")
+                else "N/A"
+            ),
+        },
     ]
 
 
@@ -622,6 +657,9 @@ def build_report_pack(state: Dict[str, Any]) -> Dict[str, Any]:
     upside_pt = _upside(target, share_price)
     rating = model_rating(upside_pt) if verified else None
     dcf_low, dcf_high = _sensitivity_range(state.get("valuation_sensitivity"))
+    op_low, op_high = scenario_dcf_range(state.get("operating_scenarios"))
+    if op_low is not None and op_high is not None:
+        dcf_low, dcf_high = op_low, op_high
     peer_median = None
     matrix = state.get("peer_comparison_matrix") or {}
     if isinstance(matrix.get("peer_medians"), dict):
@@ -672,6 +710,24 @@ def build_report_pack(state: Dict[str, Any]) -> Dict[str, Any]:
             + (" minus indicated dividend" if dividend else "")
             + "."
         ),
+        "pnl_forecast": _pnl_forecast_rows(applied, dcf_block),
+        "operating_scenarios": _scenario_pack(state.get("operating_scenarios")),
+        "catalysts": build_catalyst_register(state),
+        "year1_eps": _year1_eps(applied, dcf_block),
+        "pnl_method": dcf_block.get("pnl_method"),
+    }
+    thesis = build_thesis_pack(
+        state,
+        model_price_target=target,
+        model_year1_eps=pack["year1_eps"],
+        model_growth=_finite(applied.get("high_growth_rate")),
+        share_price=share_price,
+    )
+    pack["street"] = thesis["comparison"]
+    pack["thesis"] = {
+        "spine": thesis["spine"],
+        "headline": thesis["comparison"].get("headline"),
+        "has_street": thesis["comparison"].get("has_street"),
     }
     pack["assumptions"] = _assumption_rows(
         state,
@@ -733,6 +789,17 @@ def _valuation_points(pack: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "kind": "marker",
             }
         )
+    street_pt = (pack.get("street") or {}).get("target_mean")
+    if street_pt is not None:
+        points.append(
+            {
+                "label": "Street mean PT",
+                "value": street_pt,
+                "low": (pack.get("street") or {}).get("target_low"),
+                "high": (pack.get("street") or {}).get("target_high"),
+                "kind": "marker",
+            }
+        )
     price = pack.get("share_price")
     if price is not None:
         points.append(
@@ -745,3 +812,91 @@ def _valuation_points(pack: Dict[str, Any]) -> List[Dict[str, Any]]:
             }
         )
     return points
+
+
+def _year1_eps(applied: Dict[str, Any], dcf_block: Dict[str, Any]) -> Optional[float]:
+    projections = dcf_block.get("projections") or []
+    if projections and projections[0].get("eps") is not None:
+        return _finite(projections[0].get("eps"))
+    return None
+
+
+def _pnl_forecast_rows(
+    applied: Dict[str, Any],
+    dcf_block: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    base_rev = _finite(applied.get("base_revenue"))
+    base_ebit = _finite(applied.get("base_ebit"))
+    if base_rev is not None:
+        period = str(applied.get("base_period") or "").strip()
+        eps_basis = str(applied.get("base_eps_basis") or "reported")
+        rows.append(
+            {
+                "year": period or "Last reported",
+                "stage": "reported",
+                "revenue": base_rev,
+                "ebit": base_ebit,
+                "operating_margin": (base_ebit / base_rev) if base_rev else None,
+                "net_income": _finite(applied.get("base_net_income")),
+                "eps": _finite(applied.get("base_eps")),
+                "eps_basis": eps_basis,
+                "fcff": None,
+            }
+        )
+    for projection in (dcf_block.get("projections") or [])[:5]:
+        if not isinstance(projection, dict):
+            continue
+        rows.append(
+            {
+                "year": projection.get("year"),
+                "stage": projection.get("stage"),
+                "revenue": _finite(projection.get("revenue")),
+                "ebit": _finite(projection.get("ebit")),
+                "operating_margin": _finite(projection.get("operating_margin")),
+                "net_income": _finite(projection.get("net_income")),
+                "eps": _finite(projection.get("eps")),
+                "eps_basis": "model",
+                "fcff": _finite(projection.get("fcff")),
+            }
+        )
+    return rows
+
+
+def _scenario_pack(scenarios: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not scenarios:
+        return None
+    cases = scenarios.get("cases") or {}
+    packed_cases = []
+    for name in ("bear", "base", "bull"):
+        case = cases.get(name)
+        if not isinstance(case, dict):
+            continue
+        packed_cases.append(
+            {
+                "name": name,
+                "labels": case.get("labels") or {},
+                "high_growth_rate": case.get("high_growth_rate"),
+                "high_growth_years": case.get("high_growth_years"),
+                "terminal_margin": case.get("terminal_margin"),
+                "sales_to_capital": case.get("sales_to_capital"),
+                "terminal_growth_rate": case.get("terminal_growth_rate"),
+                "dcf_per_share": case.get("dcf_per_share"),
+                "fair_value": case.get("fair_value"),
+                "price_target_12m": case.get("price_target_12m"),
+                "year1_eps": case.get("year1_eps"),
+                "year1_revenue": case.get("year1_revenue"),
+            }
+        )
+    bear = cases.get("bear") or {}
+    bull = cases.get("bull") or {}
+    return {
+        "methodology": scenarios.get("methodology"),
+        "identical_to_base": scenarios.get("identical_to_base"),
+        "wacc_held": scenarios.get("wacc_held"),
+        "cases": packed_cases,
+        "bear_pt": bear.get("price_target_12m"),
+        "bull_pt": bull.get("price_target_12m"),
+        "bear_dcf": bear.get("dcf_per_share"),
+        "bull_dcf": bull.get("dcf_per_share"),
+    }

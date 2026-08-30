@@ -10,6 +10,7 @@ from ..graphs.desk import QUALITATIVE, REVIEWER, WRITER, make_message
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import QUALITATIVE_SYSTEM
 from ..tools.sec_api import fetch_latest_10k_sections, sourced_filing_payload
+from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_text
 
 logger = logging.getLogger("QualitativeAnalyst")
@@ -245,6 +246,12 @@ def qualitative_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     summary = _llm_summary(ticker, item_1a or "", item_7 or "")
     if not summary:
         raise LLMCallError("Qualitative analyst returned an empty filing assessment.")
+    if contains_web_link(summary):
+        logger.warning(
+            "Qualitative summary for %s contained a web link; using evidence-only fallback.",
+            ticker,
+        )
+        summary = _deterministic_summary(ticker, item_1a or "", item_7 or "")
 
     evidence = _structured_evidence(item_1a, item_7)
     business_risks = []
