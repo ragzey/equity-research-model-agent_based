@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Equity research</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand">Equity research</div>
+        <p class="lede">
+          Multi-agent FCFF desk. Numbers come from the model; this is not a rating.
+        </p>
+        <div class="run-state" id="run-state">Idle</div>
+      </header>
+
+      <div class="shell">
+        <aside class="rail">
+          <form id="run-form" autocomplete="off">
+            <label>
+              Ticker
+              <input
+                id="ticker"
+                name="ticker"
+                type="text"
+                required
+                spellcheck="false"
+                placeholder="MSFT"
+              />
+            </label>
+            <label>
+              Horizon
+              <input
+                id="year"
+                name="year"
+                type="text"
+                value="{{ default_year }}"
+              />
+            </label>
+            <label>
+              Peers
+              <input
+                id="peers"
+                name="peers"
+                type="text"
+                spellcheck="false"
+                placeholder="AAPL GOOGL AMZN"
+              />
+            </label>
+            <label>
+              Bond ISINs
+              <input
+                id="bonds"
+                name="bonds"
+                type="text"
+                spellcheck="false"
+                placeholder="Optional TRACE ISINs"
+              />
+            </label>
+            <button type="submit" id="run-btn">Run desk</button>
+          </form>
+
+          <dl class="env" id="env"></dl>
+
+          <div class="recent-block">
+            <h2>Recent memos</h2>
+            <ul class="recent" id="recent"></ul>
+          </div>
+        </aside>
+
+        <main class="main">
+          <div class="empty" id="empty">
+            <p>
+              Enter a non-financial ticker and run. The desk pulls filings and
+              statements, reviews assumptions, then writes a memo.
+            </p>
+            <p class="hint">
+              Banks and other financials are out of scope for this FCFF model.
+            </p>
+          </div>
+
+          <div class="workspace" id="workspace" hidden>
+            <section class="identity" id="identity"></section>
+            <section class="metrics" id="metrics"></section>
+            <div class="bar">
+              <div class="tabs" role="tablist">
+                <button type="button" class="tab is-on" data-tab="memo">Memo</button>
+                <button type="button" class="tab" data-tab="desk">Desk</button>
+                <button type="button" class="tab" data-tab="log">Log</button>
+              </div>
+              <div class="downloads" id="downloads"></div>
+            </div>
+            <section class="panel is-on" id="panel-memo" data-panel="memo"></section>
+            <section class="panel" id="panel-desk" data-panel="desk" hidden></section>
+            <section class="panel" id="panel-log" data-panel="log" hidden>
+              <pre class="log" id="log"></pre>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

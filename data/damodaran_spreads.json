@@ -1,0 +1,23 @@
+{
+  "as_of": "2026-01-05",
+  "firm_class": "large_cap_nonfinancial",
+  "source": "Aswath Damodaran large-cap non-financial interest coverage table (dated static snapshot).",
+  "source_url": "https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/ratings.html",
+  "notes": "This file is the source of truth for synthetic default spreads. An optional HTML refresh may update the cache copy only; a failed refresh must not replace this snapshot.",
+  "buckets": [
+    {"gt": 8.5, "lte": null, "rating": "AAA", "spread": 0.0069},
+    {"gt": 6.5, "lte": 8.5, "rating": "AA", "spread": 0.0085},
+    {"gt": 5.5, "lte": 6.5, "rating": "A+", "spread": 0.0107},
+    {"gt": 4.25, "lte": 5.5, "rating": "A", "spread": 0.0121},
+    {"gt": 3.0, "lte": 4.25, "rating": "A-", "spread": 0.0143},
+    {"gt": 2.5, "lte": 3.0, "rating": "BBB", "spread": 0.0182},
+    {"gt": 2.25, "lte": 2.5, "rating": "BB+", "spread": 0.0228},
+    {"gt": 2.0, "lte": 2.25, "rating": "BB", "spread": 0.0275},
+    {"gt": 1.75, "lte": 2.0, "rating": "B+", "spread": 0.0387},
+    {"gt": 1.5, "lte": 1.75, "rating": "B", "spread": 0.0514},
+    {"gt": 1.25, "lte": 1.5, "rating": "B-", "spread": 0.0652},
+    {"gt": 0.8, "lte": 1.25, "rating": "CCC", "spread": 0.088},
+    {"gt": 0.5, "lte": 0.8, "rating": "CC", "spread": 0.115},
+    {"gt": null, "lte": 0.5, "rating": "D", "spread": 0.15}
+  ]
+}

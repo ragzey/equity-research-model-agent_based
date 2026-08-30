@@ -1,0 +1,88 @@
+"""Tests for SEC section extraction, evidence fallback, and graph compilation."""
+
+import unittest
+
+from equity_research.agents.qualitative import _deterministic_summary
+from equity_research.agents.valuation_router import (
+    route_valuation_method,
+    unsupported_financial_node,
+)
+from equity_research.graphs.defaults import initial_state
+from equity_research.graphs.graph import graph
+from equity_research.tools.sec_api import extract_sec_section
+
+
+class QualitativeTests(unittest.TestCase):
+    def test_extracts_substantive_section_not_toc(self):
+        text = (
+            "ITEM 1A. Risk Factors 5\nITEM 1B. Unresolved 12\n"
+            "ITEM 1A. RISK FACTORS\n"
+            + ("Supply chain disruption could materially affect operations. " * 50)
+            + "\nITEM 1B. UNRESOLVED STAFF COMMENTS\n"
+            + "ITEM 7. MANAGEMENT DISCUSSION\n"
+            + ("Revenue and margin discussion for the period. " * 50)
+            + "\nITEM 7A. MARKET RISK\n"
+        )
+        item_1a = extract_sec_section(text, "1A")
+        item_7 = extract_sec_section(text, "7")
+        self.assertIsNotNone(item_1a)
+        self.assertIsNotNone(item_7)
+        self.assertIn("Supply chain disruption", item_1a)
+        self.assertIn("Revenue and margin", item_7)
+
+    def test_missing_evidence_never_invokes_historical_knowledge(self):
+        summary = _deterministic_summary("TEST", "", "")
+        self.assertIn("evidence unavailable", summary.lower())
+        self.assertIn("no conclusion drawn", summary.lower())
+
+    def test_safe_harbor_boilerplate_is_not_litigation_evidence(self):
+        summary = _deterministic_summary(
+            "TEST",
+            (
+                "These are forward-looking statements under the Private Securities "
+                "Litigation Reform Act of 1995."
+            ),
+            "",
+        )
+        self.assertIn(
+            "No configured high-priority phrase was found",
+            summary,
+        )
+
+    def test_deterministic_evidence_is_section_tagged(self):
+        summary = _deterministic_summary(
+            "TEST",
+            "A supply chain disruption could materially affect operations.",
+            "",
+        )
+        self.assertIn("[Item 1A]", summary)
+
+    def test_graph_contains_current_nodes(self):
+        node_names = set(graph.get_graph().nodes)
+        self.assertTrue(
+            {
+                "aggregator",
+                "competitive_analyst",
+                "qualitative_analyst",
+                "valuation_assumption_reviewer",
+                "quant_analyst",
+            }.issubset(node_names)
+        )
+        self.assertIn("unsupported_financial", node_names)
+        self.assertNotIn("bank_quant_analyst", node_names)
+
+    def test_financial_firms_skip_fcff(self):
+        state = initial_state("JPM", "2026")
+        state["is_financial"] = True
+        self.assertEqual(route_valuation_method(state), "unsupported_financial")
+        result = unsupported_financial_node(state)
+        self.assertEqual(result["review_action"], "stop")
+        self.assertIsNone(result["calculated_dcf_value"])
+        self.assertEqual(
+            result["review_findings"][0]["code"],
+            "UNSUPPORTED_FINANCIAL_FIRM",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

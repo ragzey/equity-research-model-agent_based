@@ -1,0 +1,10 @@
+yfinance>=0.2.40
+pandas>=2.0.0
+requests>=2.31.0
+beautifulsoup4>=4.11.1
+python-dotenv>=1.0.0
+typing_extensions>=4.0.0
+langgraph>=1.2.11
+fpdf2>=2.7.0
+flask>=3.0.0
+markdown>=3.5.0
