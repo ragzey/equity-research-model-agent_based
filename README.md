@@ -2,6 +2,8 @@
 
 Multi-agent equity research pipeline built around a shared **LangGraph state ledger**. Agents read and write structured financial data so valuation math stays deterministic and auditable.
 
+**Closed model (30 Aug 2026):** ticker in → Python WACC / three-stage FCFF / operating P&L / 70–30 blend / 12-month PT, plus LLM research on a clipped ledger. Full write-up: [`FINAL_MODEL.md`](FINAL_MODEL.md).
+
 ## Financial Data & Technology Architecture
 
 Corporate bonds trade **over-the-counter (OTC)** rather than on centralized public exchanges, so secondary-market fixed-income data is fragmented, lag-prone, and often behind institutional paywalls. To maintain institutional-grade modeling without a Bloomberg terminal, this pipeline implements a **hybrid fixed-income data strategy** with a deterministic fallback.
@@ -83,6 +85,11 @@ When TRACE data is empty, illiquid, or unavailable:
 | Post-Quant arithmetic review | `agents/post_quant_reviewer.py` | ✅ bounded retry + FCFF durability diagnostics |
 | 5x5 DCF sensitivity | `agents/sensitivity.py` | ✅ WACC ±100 bp; *g* centered on applied perpetuity |
 | Financial-firm scope gate | `tools/firm_classifier.py`, `agents/valuation_router.py` | ✅ FCFF withheld; banks/insurers/brokers out of scope |
+| Operating P&L | `tools/valuation.py`, `tools/firm_classifier.py` | ✅ Same fiscal period as DCF; FCFF stays unlevered |
+| Operating bear/base/bull | `tools/operating_scenarios.py`, `agents/sensitivity.py` | ✅ Evidence-gated menus; WACC held at base |
+| Dated catalysts | `tools/catalysts.py` | ✅ Yahoo / 10-K dates; no invented dates |
+| Model versus Street | `tools/street.py` | ✅ Yahoo fields + Python thesis spine |
+| URL / ticker grounding | `utils/grounding.py`, auditor / writer / qualitative | ✅ `www.` and `http(s)` dropped from LLM prose |
 
 ### Design correction vs. generic tutorials
 
@@ -120,6 +127,9 @@ src/equity_research/
     ├── operating_cycle.py
     ├── assumption_menus.py
     ├── bond_identifiers.py
+    ├── catalysts.py
+    ├── operating_scenarios.py
+    ├── street.py
     ├── pdf_memo.py
     ├── sec_api.py
     ├── finnhub_bond.py
@@ -227,5 +237,6 @@ Year-1/Year-2 Yahoo consensus, when available and inside a 40% absolute cap, is 
 
 ## Logs
 
-- `PROJECT_LOG.md` — full project chronology  
-- `IMPLEMENTATION_LOG.md` — implementation rationale and audit fixes  
+- `FINAL_MODEL.md` — closed model: what was built, lock-ins, graph, hallucination controls  
+- `PROJECT_LOG.md` — early project chronology  
+- `IMPLEMENTATION_LOG.md` — implementation rationale and earlier audit fixes  

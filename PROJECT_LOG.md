@@ -1,6 +1,6 @@
 # Equity Research Pipeline — Project Log
 
-**Last updated:** 2026-08-29  
+**Last updated:** 2026-08-29 (historical). The closed model is documented in [`FINAL_MODEL.md`](FINAL_MODEL.md).  
 **Workspace:** `C:\Equity research model`  
 **Purpose:** Multi-agent equity research pipeline (LangGraph target architecture)
 
