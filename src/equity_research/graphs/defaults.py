@@ -46,6 +46,7 @@ def initial_state(
         dcf_overrides=None,
         valuation_sensitivity=None,
         agent_messages=[],
+        audit_report=None,
         is_math_verified=False,
         reviewer_feedback=None,
         review_findings=None,

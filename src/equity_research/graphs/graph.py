@@ -18,6 +18,7 @@ from ..agents.valuation_router import (
     valuation_router_node,
 )
 from ..agents.writer import lead_writer_node
+from ..agents.independent_auditor import independent_auditor_node
 from .state import EquityResearchState
 
 
@@ -27,9 +28,9 @@ def build_research_graph():
 
     Competitive and Qualitative run in parallel after aggregation. The aggregator
     harvests similar-stock candidates and 10-K bond ISINs on its own. Competitive,
-    Qualitative, the assumption reviewer, and the writer must call OpenAI; there
-    is no silent deterministic desk. Quant remains Python for WACC and FCFF. The
-    reviewer only accepts or rejects bounded Python DCF candidates.
+    Qualitative, the assumption reviewer, the writer, and the independent auditor
+    must call the model. Quant remains Python for WACC and FCFF. The auditor may
+    correct narrative and clip invented tickers; it may not rewrite DCF or WACC.
     """
     workflow = StateGraph(EquityResearchState)
     workflow.add_node("aggregator", aggregator_node)
@@ -44,6 +45,7 @@ def build_research_graph():
     workflow.add_node("post_quant_reviewer", post_quant_reviewer_node)
     workflow.add_node("sensitivity_analyst", sensitivity_analyst_node)
     workflow.add_node("lead_writer", lead_writer_node)
+    workflow.add_node("independent_auditor", independent_auditor_node)
     workflow.add_node("unsupported_financial", unsupported_financial_node)
 
     workflow.add_edge(START, "aggregator")
@@ -73,7 +75,8 @@ def build_research_graph():
     )
     workflow.add_edge("sensitivity_analyst", "lead_writer")
     workflow.add_edge("unsupported_financial", "lead_writer")
-    workflow.add_edge("lead_writer", END)
+    workflow.add_edge("lead_writer", "independent_auditor")
+    workflow.add_edge("independent_auditor", END)
     return workflow.compile()
 
 

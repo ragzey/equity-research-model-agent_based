@@ -47,6 +47,7 @@ class EquityResearchState(TypedDict):
     dcf_overrides: Optional[Dict[str, Any]]  # Reviewed qualitative-to-quant inputs
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid
     agent_messages: Annotated[List[Dict[str, Any]], operator.add]  # Desk handoffs (append-only)
+    audit_report: Optional[Dict[str, Any]]  # Independent auditor findings and corrections
 
     # 5. Quality Control (Updated by the Reviewer Agent)
     is_math_verified: bool  # Has the compliance check passed?

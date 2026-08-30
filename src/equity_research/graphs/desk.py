@@ -9,6 +9,7 @@ COMPETITIVE = "competitive_analyst"
 REVIEWER = "assumption_reviewer"
 QUANT = "quant_analyst"
 WRITER = "lead_writer"
+AUDITOR = "independent_auditor"
 
 DECISION_KEYS = (
     "terminal_margin",

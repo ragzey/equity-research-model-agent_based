@@ -369,7 +369,29 @@ function renderSummary(summary) {
       </div>`
     )
     .join("");
+  const audit = summary.audit_report || {};
+  const auditAgents = audit.agents || {};
+  const auditRows = Object.keys(auditAgents)
+    .map((name) => {
+      const block = auditAgents[name] || {};
+      const findings = (block.findings || [])
+        .map((item) => escapeHtml(item.message || item.code || ""))
+        .filter(Boolean)
+        .join(" ");
+      return `
+      <div class="decision">
+        <div class="who">${escapeHtml(name)} · ${escapeHtml(block.action || "pass")}</div>
+        <div>${findings || "No findings."}</div>
+      </div>`;
+    })
+    .join("");
+  const auditFixes = (audit.corrections || [])
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("");
   $("#panel-desk").innerHTML = `
+    <h2>Independent audit</h2>
+    ${auditRows || "<p class='hint'>No independent audit on this memo.</p>"}
+    ${auditFixes ? `<ul class="hint">${auditFixes}</ul>` : ""}
     <h2>Accept / reject</h2>
     ${decisions || "<p class='hint'>No reviewer decisions on this memo.</p>"}
     <h2>Handoffs</h2>

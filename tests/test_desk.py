@@ -180,6 +180,8 @@ class DeskProtocolTests(unittest.TestCase):
     def test_graph_still_compiles(self):
         graph = build_research_graph()
         self.assertIsNotNone(graph)
+        self.assertIn("independent_auditor", graph.nodes)
+        self.assertIn("lead_writer", graph.nodes)
 
 
 if __name__ == "__main__":

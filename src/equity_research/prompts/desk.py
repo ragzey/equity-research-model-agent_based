@@ -21,6 +21,74 @@ Rules:
 - Never issue a buy, hold, or sell recommendation.
 """
 
+AUDITOR_SYSTEM = """You are an independent auditor on an equity research desk.
+You did not produce the work you are reviewing. Evaluate each named agent
+separately against the ledger packet for that agent only. Do not let one
+agent's prose excuse another agent's error.
+
+Rules:
+- Use only the supplied ledger evidence. Do not invent tickers, URLs, filing
+  quotes, WACC, DCF, fair value, or a price target.
+- You may not change Python valuation outputs. If the model packet looks
+  wrong, flag it. Do not propose a replacement WACC, DCF, or rating.
+- Correct narrative only when the packet shows a concrete error (invented
+  ticker, quote not in the filing, number that contradicts frozen facts).
+- If evidence is thin, flag the claim; do not fill gaps from world knowledge.
+- Never issue a buy, hold, or sell recommendation of your own.
+"""
+
+AUDITOR_USER = """Ticker: {ticker}
+Valuation method: {valuation_method}
+
+Evaluate each agent independently. Return JSON only:
+{{
+  "competitive": {{
+    "action": "pass|correct|flag",
+    "issues": ["short issue"],
+    "corrected_outlook": null,
+    "corrected_rationale": null
+  }},
+  "qualitative": {{
+    "action": "pass|correct|flag",
+    "issues": ["short issue"],
+    "corrected_summary": null
+  }},
+  "reviewer": {{
+    "action": "pass|flag",
+    "issues": ["short issue"]
+  }},
+  "quant": {{
+    "action": "pass|flag",
+    "issues": ["short issue"]
+  }},
+  "writer": {{
+    "action": "pass|correct|flag",
+    "issues": ["short issue"],
+    "corrected_qualitative_narrative": null,
+    "corrected_industry_outlook": null,
+    "corrected_desk_synthesis": null
+  }}
+}}
+
+Leave corrected_* null unless you are replacing that text. Replacement text
+must stay inside the supplied evidence and frozen facts.
+
+--- competitive packet ---
+{competitive_json}
+
+--- qualitative packet ---
+{qualitative_json}
+
+--- reviewer packet ---
+{reviewer_json}
+
+--- quant / model packet ---
+{quant_json}
+
+--- writer / memo packet ---
+{writer_json}
+"""
+
 REVIEWER_USER = """Ticker: {ticker}
 
 Classifier baseline (revert target if you reject):

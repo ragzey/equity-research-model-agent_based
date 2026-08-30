@@ -216,9 +216,10 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
         _row(
             "Narrative agents",
             (
-                "Competitive, Qualitative, assumption reviewer, and writer call "
-                "OpenAI or Gemini on ledger evidence. They may not invent tickers, URLs, "
-                "or DCF inputs."
+                "Competitive, Qualitative, assumption reviewer, writer, and independent "
+                "auditor call OpenAI or Gemini on ledger evidence. They may not invent "
+                "tickers, URLs, or DCF inputs. The auditor may correct narrative; it "
+                "may not rewrite WACC or DCF."
             ),
             "OpenAI or Gemini Chat Completions (narrative only)",
             "",
