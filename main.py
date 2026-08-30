@@ -38,6 +38,7 @@ def run_pipeline(
     target_bonds: Optional[List[str]] = None,
     openai_api_key: Optional[str] = None,
     openai_model: Optional[str] = None,
+    llm_provider: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Initialize state, invoke the compiled graph, and return final state."""
     clean_ticker = ticker.strip().upper()
@@ -62,7 +63,11 @@ def run_pipeline(
         target_bonds=bonds or None,
         competitor_tickers=peers or None,
     )
-    with llm_session(api_key=openai_api_key, model=openai_model):
+    with llm_session(
+        api_key=openai_api_key,
+        model=openai_model,
+        provider=llm_provider,
+    ):
         require_llm()
         final_state = build_research_graph().invoke(starting_state)
     logger.info("Pipeline completed successfully for %s", clean_ticker)
@@ -183,12 +188,18 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--openai-api-key",
         default=None,
-        help="OpenAI key for this run. Overrides OPENAI_API_KEY. Prefer .env or the GUI.",
+        help="OpenAI or Gemini key for this run. Prefer .env or the GUI.",
     )
     parser.add_argument(
         "--openai-model",
         default=None,
-        help="OpenAI chat model (default: gpt-4o-mini, or OPENAI_MODEL).",
+        help="Chat model (gpt-4o-mini or gemini-2.5-flash, etc.).",
+    )
+    parser.add_argument(
+        "--llm-provider",
+        choices=("auto", "openai", "gemini"),
+        default="auto",
+        help="Which API to call. auto infers from the key (sk- vs AIza).",
     )
     parser.add_argument(
         "--log-level",
@@ -212,6 +223,7 @@ def main() -> int:
             target_bonds=args.target_bonds,
             openai_api_key=args.openai_api_key,
             openai_model=args.openai_model,
+            llm_provider=None if args.llm_provider == "auto" else args.llm_provider,
         )
         print_summary(args.ticker, result)
         return 0

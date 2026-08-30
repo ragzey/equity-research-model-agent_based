@@ -133,6 +133,14 @@ SEC_USER_AGENT="MyResearchProject/1.0 (replace-with-your-real-email)"
 ```
 Replace the placeholder with a monitored contact address before querying EDGAR.
 
+**LLM (required for Competitive, Qualitative, Reviewer, Writer):** OpenAI (`OPENAI_API_KEY`, `sk-…`) or Gemini from [Google AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` or `GOOGLE_API_KEY`, `AIza…`). Paste the key in the GUI, or:
+
+```
+python main.py --ticker TJX --openai-api-key AIza... --llm-provider gemini
+```
+
+Default Gemini model is `gemini-2.5-flash`. WACC and DCF stay in Python.
+
 **Finnhub (required for TRACE primary path):**
 ```
 FINNHUB_API_KEY=your_finnhub_key

@@ -69,6 +69,10 @@ def _env_status() -> Dict[str, bool]:
     )
     return {
         "openai": bool(os.getenv("OPENAI_API_KEY", "").strip()),
+        "gemini": bool(
+            os.getenv("GEMINI_API_KEY", "").strip()
+            or os.getenv("GOOGLE_API_KEY", "").strip()
+        ),
         "finnhub": bool(os.getenv("FINNHUB_API_KEY", "").strip()),
         "sec_user_agent_ok": not placeholder,
     }
@@ -229,6 +233,7 @@ def _run_job(
     bonds: List[str],
     openai_api_key: str,
     openai_model: str,
+    llm_provider: str,
 ) -> None:
     handler = _JobLogHandler(job_id)
     root = logging.getLogger()
@@ -249,6 +254,7 @@ def _run_job(
                 target_bonds=bonds,
                 openai_api_key=openai_api_key or None,
                 openai_model=openai_model or None,
+                llm_provider=llm_provider or None,
             )
             summary = summarize_state(state)
             _write_sidecar(summary)
@@ -298,6 +304,7 @@ def api_run():
     bonds = _parse_symbols(str(payload.get("bonds") or ""))
     openai_api_key = str(payload.get("openai_api_key") or "").strip()
     openai_model = str(payload.get("openai_model") or "").strip()
+    llm_provider = str(payload.get("llm_provider") or "auto").strip().lower()
     if RUN_LOCK.locked():
         return jsonify({"error": "A run is already in progress."}), 409
     job_id = uuid.uuid4().hex[:10]
@@ -311,7 +318,7 @@ def api_run():
         }
     thread = threading.Thread(
         target=_run_job,
-        args=(job_id, ticker, year, peers, bonds, openai_api_key, openai_model),
+        args=(job_id, ticker, year, peers, bonds, openai_api_key, openai_model, llm_provider),
         daemon=True,
     )
     thread.start()
@@ -372,7 +379,7 @@ def api_file(name: str):
 def main() -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     print("Research desk GUI  http://127.0.0.1:5050")
-    print("Paste an OpenAI API key in the form, or set OPENAI_API_KEY.")
+    print("Paste an OpenAI or Gemini API key in the form, or set it in .env.")
     app.run(host="127.0.0.1", port=5050, debug=False, threaded=True)
 
 

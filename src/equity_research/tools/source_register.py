@@ -204,7 +204,7 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
             "Valuation math",
             (
                 "WACC, three-stage FCFF, 70/30 blend, 12-month price target, "
-                "and ±15% model band are computed in Python. OpenAI is not a "
+                "and ±15% model band are computed in Python. The LLM is not a "
                 "source for those figures."
             ),
             "equity_research.tools.valuation / report_pack",
@@ -217,10 +217,10 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
             "Narrative agents",
             (
                 "Competitive, Qualitative, assumption reviewer, and writer call "
-                "OpenAI on ledger evidence. They may not invent tickers, URLs, "
+                "OpenAI or Gemini on ledger evidence. They may not invent tickers, URLs, "
                 "or DCF inputs."
             ),
-            "OpenAI Chat Completions (narrative only)",
+            "OpenAI or Gemini Chat Completions (narrative only)",
             "",
             "Prose, peer rationale, accept/reject reasons",
         )

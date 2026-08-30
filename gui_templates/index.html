@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Equity research</title>
-    <link rel="stylesheet" href="/static/style.css?v=api-key-text" />
+    <link rel="stylesheet" href="/static/style.css?v=gemini" />
   </head>
   <body>
     <div class="app">
@@ -41,6 +41,14 @@
               />
             </label>
             <label>
+              AI provider
+              <select id="llm-provider" name="llm_provider">
+                <option value="auto">Auto (from key)</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+              </select>
+            </label>
+            <label>
               AI API key
               <input
                 id="openai-key"
@@ -49,13 +57,13 @@
                 spellcheck="false"
                 autocomplete="off"
                 autocapitalize="off"
-                placeholder="Paste your OpenAI API key (sk-...)"
+                placeholder="sk-... or AIza..."
               />
             </label>
             <p class="field-note">
-              Paste the OpenAI key the agents should use. It is not saved to
-              disk. Leave blank only if <code>.env</code> already has
-              <code>OPENAI_API_KEY</code>.
+              OpenAI (<code>sk-</code>) or Gemini from Google AI Studio
+              (<code>AIza</code>). Not saved to disk. Leave blank if
+              <code>.env</code> already has a key.
             </p>
             <label>
               Model
@@ -65,7 +73,7 @@
                 type="text"
                 spellcheck="false"
                 autocomplete="off"
-                placeholder="gpt-4o-mini"
+                placeholder="gpt-4o-mini or gemini-2.5-flash"
               />
             </label>
             <details class="advanced">
@@ -105,7 +113,7 @@
         <main class="main">
           <div class="empty" id="empty">
             <p>
-              Enter a ticker, an OpenAI API key, and run. Competitive, Qualitative,
+              Enter a ticker, an OpenAI or Gemini API key, and run. Competitive, Qualitative,
               the assumption reviewer, and the writer each call the model.
               WACC and DCF stay in Python.
             </p>
@@ -142,6 +150,6 @@
       </div>
     </div>
     <script src="/static/charts.js"></script>
-    <script src="/static/app.js?v=sources"></script>
+    <script src="/static/app.js?v=gemini"></script>
   </body>
 </html>

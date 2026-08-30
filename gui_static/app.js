@@ -7,7 +7,11 @@ const logEl = document.querySelector("#log");
 
 const KEY_STORE = "equityDesk.openaiKey";
 const MODEL_STORE = "equityDesk.openaiModel";
+const PROVIDER_STORE = "equityDesk.llmProvider";
+const OPENAI_DEFAULT = "gpt-4o-mini";
+const GEMINI_DEFAULT = "gemini-2.5-flash";
 let envHasOpenAI = false;
+let envHasGemini = false;
 
 function $(id) {
   return document.querySelector(id);
@@ -82,26 +86,65 @@ document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => switchTab(tab.dataset.tab));
 });
 
+function envHasLlm() {
+  return envHasOpenAI || envHasGemini;
+}
+
+function inferredProvider(key, selected) {
+  if (selected && selected !== "auto") return selected;
+  if ((key || "").startsWith("AIza") || (key || "").startsWith("AQ.")) return "gemini";
+  if ((key || "").startsWith("sk-")) return "openai";
+  if (envHasGemini && !envHasOpenAI) return "gemini";
+  return "openai";
+}
+
+function syncModelPlaceholder() {
+  const provider = inferredProvider(
+    $("#openai-key").value.trim(),
+    $("#llm-provider") ? $("#llm-provider").value : "auto"
+  );
+  const modelEl = $("#openai-model");
+  if (!modelEl) return;
+  if (provider === "gemini") {
+    modelEl.placeholder = GEMINI_DEFAULT;
+    if (!modelEl.value || modelEl.value === OPENAI_DEFAULT) {
+      modelEl.value = GEMINI_DEFAULT;
+    }
+  } else {
+    modelEl.placeholder = OPENAI_DEFAULT;
+    if (!modelEl.value || modelEl.value === GEMINI_DEFAULT) {
+      modelEl.value = OPENAI_DEFAULT;
+    }
+  }
+}
+
 async function loadMeta() {
   const response = await fetch("/api/meta");
   const data = await response.json();
   const env = data.env || {};
   envHasOpenAI = Boolean(env.openai);
+  envHasGemini = Boolean(env.gemini);
   $("#env").innerHTML = `
-    <dt>OpenAI</dt><dd>${env.openai ? "key in .env" : "paste a key to run"}</dd>
+    <dt>OpenAI</dt><dd>${env.openai ? "key in .env" : "off"}</dd>
+    <dt>Gemini</dt><dd>${env.gemini ? "key in .env" : "off"}</dd>
     <dt>Finnhub</dt><dd>${env.finnhub ? "on" : "off — Damodaran Kd"}</dd>
     <dt>SEC UA</dt><dd>${env.sec_user_agent_ok ? "set" : "placeholder"}</dd>
   `;
   const storedKey = sessionStorage.getItem(KEY_STORE);
   const storedModel = sessionStorage.getItem(MODEL_STORE);
+  const storedProvider = sessionStorage.getItem(PROVIDER_STORE);
+  if (storedProvider && $("#llm-provider")) {
+    $("#llm-provider").value = storedProvider;
+  }
   if (storedKey && !$("#openai-key").value) {
     $("#openai-key").value = storedKey;
   }
   if (storedModel && !$("#openai-model").value) {
     $("#openai-model").value = storedModel;
   } else if (!storedModel && !$("#openai-model").value) {
-    $("#openai-model").value = "gpt-4o-mini";
+    $("#openai-model").value = env.gemini && !env.openai ? GEMINI_DEFAULT : OPENAI_DEFAULT;
   }
+  syncModelPlaceholder();
   const recent = $("#recent");
   recent.innerHTML = "";
   (data.reports || []).forEach((item) => {
@@ -380,9 +423,10 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const openaiKey = $("#openai-key").value.trim();
   const openaiModel = $("#openai-model").value.trim();
-  if (!openaiKey && !envHasOpenAI) {
+  const llmProvider = $("#llm-provider") ? $("#llm-provider").value : "auto";
+  if (!openaiKey && !envHasLlm()) {
     showError(
-      "Paste an OpenAI API key. Competitive, Qualitative, the reviewer, and the writer must call the model."
+      "Paste an OpenAI or Gemini API key. Competitive, Qualitative, the reviewer, and the writer must call the model."
     );
     setState("Idle");
     return;
@@ -393,6 +437,7 @@ form.addEventListener("submit", async (event) => {
   if (openaiModel) {
     sessionStorage.setItem(MODEL_STORE, openaiModel);
   }
+  sessionStorage.setItem(PROVIDER_STORE, llmProvider);
   runBtn.disabled = true;
   empty.hidden = true;
   workspace.hidden = false;
@@ -409,6 +454,7 @@ form.addEventListener("submit", async (event) => {
       bonds: $("#bonds").value,
       openai_api_key: openaiKey,
       openai_model: openaiModel,
+      llm_provider: llmProvider,
     }),
   });
   const data = await response.json();
@@ -440,6 +486,13 @@ window.addEventListener("resize", () => {
     window.ResearchCharts.drawIndexedPerformance(market, history);
   }
 });
+
+if ($("#llm-provider")) {
+  $("#llm-provider").addEventListener("change", syncModelPlaceholder);
+}
+if ($("#openai-key")) {
+  $("#openai-key").addEventListener("input", syncModelPlaceholder);
+}
 
 loadMeta().catch(() => {
   $("#env").innerHTML = "<dt>Status</dt><dd>Could not read environment.</dd>";

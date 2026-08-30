@@ -74,7 +74,8 @@ form label {
   color: var(--muted);
 }
 
-input {
+input,
+select {
   display: block;
   width: 100%;
   margin-top: 4px;
@@ -86,7 +87,8 @@ input {
   font: inherit;
 }
 
-input:focus {
+input:focus,
+select:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
