@@ -27,6 +27,7 @@ DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
 DEFAULT_MODEL = DEFAULT_OPENAI_MODEL
 _MODEL_RE = re.compile(r"^[A-Za-z0-9._:-]{1,80}$")
+_GPT5_MODEL_RE = re.compile(r"^gpt-5", re.IGNORECASE)
 _MAX_KEY_LENGTH = 512
 PROVIDERS = ("openai", "gemini")
 
@@ -183,6 +184,55 @@ def chat_url_for(provider: str) -> str:
     return OPENAI_CHAT_URL
 
 
+def _omit_temperature(_model: str, provider: str) -> bool:
+    """OpenAI GPT-5.x rejects temperature=0; omit it for every OpenAI model."""
+    return provider != "gemini"
+
+
+def _use_reasoning_none(model: str, provider: str) -> bool:
+    if provider == "gemini":
+        return False
+    return bool(_GPT5_MODEL_RE.match((model or "").strip()))
+
+
+def _response_error_blob(response: requests.Response) -> str:
+    chunks = [str(getattr(response, "text", "") or ""), str(getattr(response, "reason", "") or "")]
+    try:
+        data = response.json()
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict):
+                chunks.append(str(err.get("message") or ""))
+                chunks.append(str(err.get("param") or ""))
+                chunks.append(str(err.get("code") or ""))
+            elif err:
+                chunks.append(str(err))
+    except Exception:
+        pass
+    return " ".join(chunks).lower()
+
+
+def _message_text(payload: Any) -> str:
+    try:
+        message = payload["choices"][0]["message"]
+    except (KeyError, IndexError, TypeError):
+        return ""
+    if not isinstance(message, dict):
+        return ""
+    content = message.get("content")
+    if content is None:
+        return ""
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, dict):
+                parts.append(str(item.get("text") or item.get("content") or ""))
+            else:
+                parts.append(str(item))
+        return "".join(parts).strip()
+    return str(content).strip()
+
+
 @contextmanager
 def llm_session(
     *,
@@ -295,13 +345,19 @@ def chat_text(
         return None
     url = chat_url_for(provider)
     use_json_mode = json_mode
+    omit_temperature = _omit_temperature(model, provider)
+    use_reasoning_none = _use_reasoning_none(model, provider)
     last_error = f"{provider} request failed."
-    for attempt in range(2):
+    retried_transient = False
+    for _attempt in range(5):
         body: Dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "temperature": temperature,
         }
+        if not omit_temperature:
+            body["temperature"] = temperature
+        if use_reasoning_none:
+            body["reasoning_effort"] = "none"
         if use_json_mode:
             body["response_format"] = {"type": "json_object"}
         try:
@@ -314,14 +370,33 @@ def chat_text(
                 json=body,
                 timeout=timeout,
             )
+            err_text = _response_error_blob(response)
             if (
                 use_json_mode
                 and response.status_code == 400
-                and "json" in (response.text or "").lower()
+                and "json" in err_text
             ):
                 use_json_mode = False
                 continue
-            if response.status_code in {429, 500, 502, 503} and attempt == 0:
+            if (
+                "temperature" in body
+                and response.status_code == 400
+                and "temperature" in err_text
+            ):
+                omit_temperature = True
+                continue
+            if (
+                use_reasoning_none
+                and response.status_code == 400
+                and "reasoning" in err_text
+            ):
+                use_reasoning_none = False
+                continue
+            if (
+                response.status_code in {429, 500, 502, 503}
+                and not retried_transient
+            ):
+                retried_transient = True
                 time.sleep(1.0)
                 continue
             if not response.ok:
@@ -330,7 +405,7 @@ def chat_text(
                     raise LLMCallError(last_error)
                 logger.error("LLM chat call failed: %s", last_error)
                 return None
-            content = str(response.json()["choices"][0]["message"]["content"]).strip()
+            content = _message_text(response.json())
             if not content:
                 last_error = f"{provider} returned an empty response."
                 if required:
@@ -342,7 +417,7 @@ def chat_text(
         except Exception as exc:
             last_error = redact_secrets(str(exc) or f"{provider} request failed.")
             logger.exception("LLM chat call failed.")
-            if attempt == 0:
+            if _attempt == 0:
                 time.sleep(0.5)
                 continue
             if required:
