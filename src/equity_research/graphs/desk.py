@@ -6,6 +6,8 @@ from typing import Any, Dict, Iterable, List, Optional
 
 QUALITATIVE = "qualitative_analyst"
 COMPETITIVE = "competitive_analyst"
+INDUSTRY_MACRO = "industry_macro"
+ARCHITECT = "assumption_architect"
 REVIEWER = "assumption_reviewer"
 QUANT = "quant_analyst"
 WRITER = "lead_writer"
@@ -16,6 +18,7 @@ DECISION_KEYS = (
     "company_specific_risk_premium",
     "high_growth_years",
     "high_growth_rate",
+    "terminal_growth_rate",
 )
 
 

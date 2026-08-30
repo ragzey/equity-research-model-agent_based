@@ -126,6 +126,15 @@ class ConsensusBoundTests(unittest.TestCase):
         )
         self.assertAlmostEqual(mid, 0.13)
 
+        trailing, rationale = blend_high_growth_rate(
+            0.02,
+            (0.02, 0.07),
+            {"growth": 0.089, "source": "yahoo_info_revenueGrowth_trailing"},
+        )
+        self.assertAlmostEqual(trailing, 0.02)
+        self.assertIn("trailing", rationale.lower())
+        self.assertNotIn("50/50", rationale)
+
 
 class DamodaranSnapshotTests(unittest.TestCase):
     def test_dated_file_matches_legacy_coverage_buckets(self):

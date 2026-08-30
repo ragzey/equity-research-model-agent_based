@@ -13,6 +13,7 @@ from equity_research.agents.independent_auditor import (
     clip_peer_selection,
     clip_qualitative_evidence,
     independent_auditor_node,
+    novel_tickers,
 )
 from equity_research.graphs.defaults import initial_state
 from equity_research.graphs.graph import build_research_graph
@@ -223,6 +224,21 @@ class ClipAndAlignTests(unittest.TestCase):
         self.assertIn("MEMO_RATING", codes)
         self.assertIn("MEMO_WACC", codes)
 
+    def test_novel_tickers_ignore_english_and_catch_invented_symbols(self):
+        allowed = {"TJX", "ROST"}
+        self.assertEqual(
+            novel_tickers("TJX competes with ROST in off-price retail.", allowed),
+            [],
+        )
+        self.assertEqual(
+            novel_tickers("The company faces material litigation.", allowed),
+            [],
+        )
+        self.assertEqual(
+            novel_tickers("TJX will acquire ZZZZ next year.", allowed),
+            ["ZZZZ"],
+        )
+
 
 class IndependentAuditorNodeTests(unittest.TestCase):
     @patch("equity_research.agents.independent_auditor.write_memo_pdf")
@@ -300,6 +316,8 @@ class IndependentAuditorNodeTests(unittest.TestCase):
         edges = {(edge.source, edge.target) for edge in compiled.edges}
         self.assertIn(("lead_writer", "independent_auditor"), edges)
         self.assertIn(("independent_auditor", "__end__"), edges)
+        self.assertIn(("industry_macro", "valuation_router"), edges)
+        self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 
 
 if __name__ == "__main__":

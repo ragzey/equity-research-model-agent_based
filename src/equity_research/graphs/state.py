@@ -43,8 +43,9 @@ class EquityResearchState(TypedDict):
     qualitative_evidence: Optional[List[Dict[str, str]]]  # Section-tagged filing quotes
     peer_comparison_matrix: Optional[Dict[str, Any]]  # Relative valuation vs peers
     peer_selection: Optional[Dict[str, Any]]  # Competitive analyst keep/drop rationale
-    industry_outlook: Optional[str]  # Industry headwinds, tailwinds, competitive barriers
-    dcf_overrides: Optional[Dict[str, Any]]  # Reviewed qualitative-to-quant inputs
+    industry_outlook: Optional[str]  # Industry/macro demand narrative
+    industry_macro_packet: Optional[Dict[str, Any]]  # Structured category/cycle/macro views
+    dcf_overrides: Optional[Dict[str, Any]]  # Architect candidates after reviewer veto
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid
     agent_messages: Annotated[List[Dict[str, Any]], operator.add]  # Desk handoffs (append-only)
     audit_report: Optional[Dict[str, Any]]  # Independent auditor findings and corrections

@@ -163,6 +163,58 @@ def _assumption_table(pack: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _industry_driver_table(packet: Dict[str, Any]) -> str:
+    if not packet:
+        return ""
+    rows = [
+        (
+            "Category growth",
+            (packet.get("category_growth") or {}).get("view"),
+            (packet.get("category_growth") or {}).get("evidence"),
+        ),
+        (
+            "Pricing power",
+            (packet.get("pricing_power") or {}).get("view"),
+            (packet.get("pricing_power") or {}).get("evidence"),
+        ),
+        (
+            "Cycle",
+            (packet.get("cycle") or {}).get("view"),
+            (packet.get("cycle") or {}).get("evidence"),
+        ),
+        (
+            "Demand inflection",
+            (packet.get("demand_inflection") or {}).get("direction"),
+            (packet.get("demand_inflection") or {}).get("evidence"),
+        ),
+        (
+            "Rates",
+            (packet.get("macro") or {}).get("rates_view"),
+            (packet.get("macro") or {}).get("evidence"),
+        ),
+        (
+            "FX / demand",
+            (packet.get("macro") or {}).get("fx_demand_view"),
+            "",
+        ),
+    ]
+    lines = [
+        "### Industry and macro drivers",
+        "",
+        "| Driver | View | Ledger evidence |",
+        "|---|---|---|",
+    ]
+    for label, view, evidence in rows:
+        lines.append(
+            f"| {label} | {view or 'insufficient'} | "
+            f"{' '.join(str(evidence or '').split()) or 'n/a'} |"
+        )
+    rf = (packet.get("macro") or {}).get("risk_free_rate")
+    if rf is not None:
+        lines.append(f"| 10-year Treasury | {_fmt_percent(rf)} | Python live yield |")
+    return "\n".join(lines) + "\n"
+
+
 def _wacc_appendix(summary: Dict[str, Any], state: EquityResearchState) -> str:
     inputs = summary.get("valuation_date_inputs") or {}
     classification = summary.get("firm_classification") or {}
@@ -357,6 +409,11 @@ def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -
                     ),
                     qualitative=qualitative[:6000],
                     outlook=industry[:4000],
+                    industry_macro_json=json.dumps(
+                        state.get("industry_macro_packet") or {},
+                        indent=2,
+                        default=str,
+                    )[:4000],
                 ),
             },
         ],
@@ -366,11 +423,15 @@ def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -
     desk_synthesis = str(payload.get("desk_synthesis") or "").strip()
     if not desk_synthesis:
         raise LLMCallError("Lead writer did not return a desk synthesis.")
+    packet_narrative = str(
+        ((state.get("industry_macro_packet") or {}).get("narrative") or "")
+    ).strip()
+    writer_qual = str(payload.get("qualitative_narrative") or "").strip()
+    if "http://" in writer_qual.lower() or "https://" in writer_qual.lower():
+        writer_qual = ""
     return {
-        "industry_outlook": str(payload.get("industry_outlook") or industry),
-        "qualitative_narrative": str(
-            payload.get("qualitative_narrative") or qualitative
-        ),
+        "industry_outlook": packet_narrative or industry,
+        "qualitative_narrative": writer_qual or qualitative,
         "desk_synthesis": desk_synthesis,
     }
 
@@ -420,6 +481,8 @@ def _write_gui_sidecar(
         "rationales": overrides.get("rationales") or {},
         "handoffs": handoffs,
         "peer_selection": state.get("peer_selection"),
+        "industry_macro_packet": state.get("industry_macro_packet"),
+        "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
         "memo_name": report_path.name,
         "pdf_name": report_path.name.replace("_memo.md", "_memo.pdf") if pdf_ok else None,
@@ -530,6 +593,7 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
 
 {narratives["qualitative_narrative"]}
 
+{_industry_driver_table(state.get("industry_macro_packet") or {})}
 ### Industry outlook
 
 {narratives["industry_outlook"]}

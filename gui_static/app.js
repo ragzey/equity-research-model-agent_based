@@ -388,7 +388,38 @@ function renderSummary(summary) {
   const auditFixes = (audit.corrections || [])
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join("");
+  const packet = summary.industry_macro_packet || {};
+  const driverRows = [
+    ["Category growth", (packet.category_growth || {}).view, (packet.category_growth || {}).evidence],
+    ["Pricing power", (packet.pricing_power || {}).view, (packet.pricing_power || {}).evidence],
+    ["Cycle", (packet.cycle || {}).view, (packet.cycle || {}).evidence],
+    ["Demand inflection", (packet.demand_inflection || {}).direction, (packet.demand_inflection || {}).evidence],
+    ["Rates", (packet.macro || {}).rates_view, (packet.macro || {}).evidence],
+  ]
+    .filter((row) => row[1] || row[2])
+    .map(
+      ([label, view, evidence]) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(view || "insufficient")}</div>
+        <div>${escapeHtml(evidence || "No excerpt.")}</div>
+      </div>`
+    )
+    .join("");
+  const architect = summary.architect_choices || {};
+  const architectRows = Object.keys(architect)
+    .map(
+      (key) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(key)}</div>
+        <div>${escapeHtml(String(architect[key]))}</div>
+      </div>`
+    )
+    .join("");
   $("#panel-desk").innerHTML = `
+    <h2>Industry / macro</h2>
+    ${driverRows || "<p class='hint'>No industry/macro packet on this memo.</p>"}
+    <h2>Architect labels</h2>
+    ${architectRows || "<p class='hint'>No architect choices on this memo.</p>"}
     <h2>Independent audit</h2>
     ${auditRows || "<p class='hint'>No independent audit on this memo.</p>"}
     ${auditFixes ? `<ul class="hint">${auditFixes}</ul>` : ""}

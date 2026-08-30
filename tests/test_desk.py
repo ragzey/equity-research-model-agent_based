@@ -76,6 +76,7 @@ class DeskProtocolTests(unittest.TestCase):
             "company_specific_risk_premium": 0.0075,
             "high_growth_years": 2,
             "high_growth_rate": 0.08,
+            "terminal_growth_rate": 0.025,
             "rationales": {"terminal_margin": "policy lift"},
         }
         baseline = {
@@ -83,6 +84,7 @@ class DeskProtocolTests(unittest.TestCase):
             "company_specific_risk_premium": 0.0,
             "high_growth_years": 3,
             "high_growth_rate": 0.05,
+            "terminal_growth_rate": 0.02,
         }
         applied = apply_override_decisions(
             proposed,
@@ -111,6 +113,7 @@ class DeskProtocolTests(unittest.TestCase):
             "company_specific_risk_premium": 0.0075,
             "high_growth_years": 2,
             "high_growth_rate": 0.08,
+            "terminal_growth_rate": 0.025,
             "rationales": {},
         }
         baseline = {
@@ -118,6 +121,7 @@ class DeskProtocolTests(unittest.TestCase):
             "company_specific_risk_premium": 0.0,
             "high_growth_years": 3,
             "high_growth_rate": 0.05,
+            "terminal_growth_rate": 0.02,
         }
         applied = apply_override_decisions(proposed, baseline, [], mode="llm")
         self.assertAlmostEqual(applied["terminal_margin"], 0.12)
@@ -182,6 +186,8 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertIsNotNone(graph)
         self.assertIn("independent_auditor", graph.nodes)
         self.assertIn("lead_writer", graph.nodes)
+        self.assertIn("industry_macro", graph.nodes)
+        self.assertIn("assumption_architect", graph.nodes)
 
 
 if __name__ == "__main__":

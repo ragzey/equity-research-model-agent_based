@@ -1,8 +1,12 @@
 """Prompt templates for research-desk agents."""
 
 from .desk import (
+    ARCHITECT_SYSTEM,
+    ARCHITECT_USER,
     AUDITOR_SYSTEM,
     AUDITOR_USER,
+    INDUSTRY_MACRO_SYSTEM,
+    INDUSTRY_MACRO_USER,
     QUALITATIVE_SYSTEM,
     REVIEWER_SYSTEM,
     REVIEWER_USER,
@@ -11,8 +15,12 @@ from .desk import (
 )
 
 __all__ = [
+    "ARCHITECT_SYSTEM",
+    "ARCHITECT_USER",
     "AUDITOR_SYSTEM",
     "AUDITOR_USER",
+    "INDUSTRY_MACRO_SYSTEM",
+    "INDUSTRY_MACRO_USER",
     "QUALITATIVE_SYSTEM",
     "REVIEWER_SYSTEM",
     "REVIEWER_USER",

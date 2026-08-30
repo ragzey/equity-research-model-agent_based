@@ -328,8 +328,12 @@ def _assumption_rows(
                 or "Lifecycle classifier on historical revenue CAGR, then bounded."
             )
             + _desk_note(decisions, "high_growth_rate"),
-            "source": consensus.get("source")
-            or "Firm classifier + optional Yahoo consensus overlay",
+            "source": (
+                "Assumption architect menu / reviewer"
+                if (state.get("dcf_overrides") or {}).get("architect_choices")
+                else consensus.get("source")
+                or "Firm classifier + optional Yahoo consensus overlay"
+            ),
         },
         {
             "item": "High-growth years",
@@ -339,7 +343,9 @@ def _assumption_rows(
                 or "Lifecycle default for the classified firm type."
             )
             + _desk_note(decisions, "high_growth_years"),
-            "source": "Firm classifier / assumption reviewer",
+            "source": "Assumption architect / reviewer"
+            if (state.get("dcf_overrides") or {}).get("architect_choices")
+            else "Firm classifier / assumption reviewer",
         },
         {
             "item": "Transition years",
@@ -360,11 +366,16 @@ def _assumption_rows(
         {
             "item": "Terminal growth",
             "value": _fmt_pct(applied.get("terminal_growth_rate")),
-            "justification": (
-                "Capped at 2.5% and not above Rf − 1.5%, so the perpetuity does not "
-                "assume the firm outgrows the economy indefinitely."
-            ),
-            "source": "Quant policy",
+            "justification": str(
+                rationales.get("terminal_growth_rate")
+                or (
+                    "Perpetuity growth from firm type and the economy (Rf minus a "
+                    "firm-type spread), with a hard ceiling of min(5%, Rf − 50bp). "
+                    "Not a universal 2.5% cap."
+                )
+            )
+            + _desk_note(decisions, "terminal_growth_rate"),
+            "source": "Architect menu / Quant policy",
         },
         {
             "item": "Sales-to-capital (high-growth)",

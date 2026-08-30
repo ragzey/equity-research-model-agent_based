@@ -43,6 +43,7 @@ def initial_state(
         peer_comparison_matrix=None,
         peer_selection=None,
         industry_outlook=None,
+        industry_macro_packet=None,
         dcf_overrides=None,
         valuation_sensitivity=None,
         agent_messages=[],

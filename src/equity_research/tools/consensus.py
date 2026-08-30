@@ -102,9 +102,19 @@ def blend_high_growth_rate(
     """Average historical CAGR with consensus, then re-apply the firm-type bounds."""
     low, high = bounds
     historical = min(max(float(historical_rate), low), high)
+    source = str((consensus or {}).get("source") or "")
     consensus_growth = (consensus or {}).get("growth")
     if consensus_growth is None:
         return historical, "High-growth rate from bounded historical revenue CAGR."
+    if "trailing" in source.lower():
+        return (
+            historical,
+            (
+                f"High-growth rate {historical:.1%} uses bounded historical CAGR only. "
+                f"{source} is trailing reported growth, not a forward estimate, so it "
+                "was not blended into the DCF."
+            ),
+        )
     consensus_growth = min(max(float(consensus_growth), 0.0), CONSENSUS_ABS_CAP)
     blended = 0.5 * historical + 0.5 * consensus_growth
     applied = min(max(blended, low), high)

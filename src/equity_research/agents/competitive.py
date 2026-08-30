@@ -22,7 +22,6 @@ from ..tools.peer_discovery import (
     rank_peer_candidates,
 )
 from ..utils.llm_client import LLMCallError, chat_json
-from ..utils.llm_synthesis import synthesize_industry_outlook
 
 logger = logging.getLogger("CompetitiveAnalyst")
 
@@ -155,6 +154,8 @@ def _llm_peer_picks(
     if not rejected:
         rejected = ranked.get("rejected") or []
     rationale = str(payload.get("rationale") or "").strip()
+    if "http://" in rationale.lower() or "https://" in rationale.lower():
+        rationale = ""
     if not rationale:
         raise LLMCallError("Competitive analyst did not return a peer-selection rationale.")
     return {
@@ -188,6 +189,8 @@ def _llm_pinned_rationale(
         required=True,
     ) or {}
     rationale = str(payload.get("rationale") or "").strip()
+    if "http://" in rationale.lower() or "https://" in rationale.lower():
+        rationale = ""
     if not rationale:
         raise LLMCallError(
             "Competitive analyst did not return a rationale for the pinned peer set."
@@ -227,7 +230,8 @@ def select_comparable_set(state: EquityResearchState) -> Dict[str, Any]:
 def competitive_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     """
     Select a comparable set, then benchmark relative valuation metrics.
-    Writes competitor_tickers, peer_selection, matrix, and outlook.
+    Writes competitor_tickers, peer_selection, and the peer matrix.
+    Industry demand, cycle, and macro belong to the industry/macro analyst.
     """
     target = state["ticker"].strip().upper()
     selection = select_comparable_set(state)
@@ -265,7 +269,6 @@ def competitive_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
             "competitor_tickers": None,
             "peer_selection": peer_selection,
             "peer_comparison_matrix": None,
-            "industry_outlook": None,
             "agent_messages": [
                 selection_message,
                 reviewer_copy,
@@ -285,24 +288,22 @@ def competitive_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         ", ".join(competitors),
     )
     matrix = build_peer_comparison_matrix(target, competitors)
-    filing_chunks = state.get("sec_filing_chunks") or []
-    filing_excerpt: Optional[str] = (
-        "\n\n".join(filing_chunks[:2]) if filing_chunks else None
+    positioning = (
+        f"{target} peer screen complete. Margin-gap interpretation is in the "
+        "moat handoff. Industry demand, cycle, and macro are owned by the "
+        "industry/macro analyst."
     )
-    outlook = synthesize_industry_outlook(target, matrix, filing_excerpt)
     handoffs = [selection_message, reviewer_copy]
-    handoffs.extend(_competitive_handoffs(target, matrix, outlook))
+    handoffs.extend(_competitive_handoffs(target, matrix, positioning))
 
     logger.info(
-        "Peer matrix built for %d tickers; industry outlook length %d chars.",
+        "Peer matrix built for %d tickers.",
         len(matrix.get("metrics", {})),
-        len(outlook),
     )
     return {
         "competitor_tickers": competitors,
         "peer_selection": peer_selection,
         "peer_comparison_matrix": matrix,
-        "industry_outlook": outlook,
         "competitive_advantages": (
             "See competitive handoff: margin gaps are not standalone moat proof."
         ),

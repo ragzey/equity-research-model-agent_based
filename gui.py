@@ -171,6 +171,8 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "discovered_bond_isins": state.get("discovered_bond_isins"),
         "review_findings": state.get("review_findings") or [],
         "audit_report": state.get("audit_report"),
+        "industry_macro_packet": state.get("industry_macro_packet"),
+        "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
         "memo_markdown": memo_text,
         "memo_html": _render_memo_html(memo_text),

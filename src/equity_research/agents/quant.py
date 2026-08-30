@@ -14,6 +14,7 @@ from ..tools.firm_classifier import (
     classify_firm_and_adjust_assumptions,
     extract_operating_baseline,
 )
+from ..tools.assumption_menus import clip_terminal_growth
 from ..tools.valuation import calculate_wacc, perform_3stage_dcf_valuation
 
 logger = logging.getLogger("QuantAnalyst")
@@ -195,6 +196,9 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     high_growth_rate = float(
         overrides.get("high_growth_rate", assumptions["high_growth_rate"])
     )
+    bounds = assumptions.get("high_growth_rate_bounds") or [0.0, 0.40]
+    band_low, band_high = float(bounds[0]), float(bounds[1])
+    high_growth_rate = min(max(high_growth_rate, band_low), band_high)
     if not 0.0 <= high_growth_rate <= 0.40:
         raise ValueError("Reviewed high-growth rate must be between 0% and 40%.")
 
@@ -229,9 +233,11 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     )
     wacc = wacc_results["wacc"]
 
-    terminal_growth = min(
-        TERMINAL_GROWTH_DEFAULT,
-        max(0.015, risk_free_rate - 0.015),
+    terminal_growth = clip_terminal_growth(
+        overrides.get("terminal_growth_rate"),
+        risk_free_rate,
+        firm_type=assumptions.get("firm_type"),
+        packet=state.get("industry_macro_packet"),
     )
     terminal_wacc = max(
         terminal_growth + 0.02,

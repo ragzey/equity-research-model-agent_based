@@ -45,8 +45,32 @@ _KNOWN_TOKENS = {
     "BUY",
     "HOLD",
     "SELL",
+    "CAGR",
+    "YOY",
+    "FCF",
+    "ROIC",
+    "NOPAT",
+    "NTM",
+    "PEG",
+    "SOTP",
+    "EV",
+    "PE",
+    "PB",
+    "PS",
+    "ROE",
+    "ROA",
+    "ICR",
+    "RF",
+    "FX",
+    "TAM",
+    "GDP",
+    "CPI",
+    "FED",
+    "US",
+    "UK",
+    "EU",
 }
-_TICKER_RE = re.compile(r"\b[A-Z]{1,5}\b")
+_TICKER_RE = re.compile(r"\b[A-Z]{2,5}\b")
 _PT_RE = re.compile(
     r"(12-month price target of )(\$[0-9,]+\.\d{2})",
     re.IGNORECASE,
@@ -217,9 +241,10 @@ def clip_qualitative_evidence(
 
 
 def novel_tickers(text: str, allowed: Set[str], background: str = "") -> List[str]:
-    background_tokens = set(_TICKER_RE.findall((background or "").upper()))
+    """Flag all-caps 2–5 letter tokens. Ordinary English is not a ticker."""
+    background_tokens = set(_TICKER_RE.findall(background or ""))
     found: List[str] = []
-    for token in _TICKER_RE.findall((text or "").upper()):
+    for token in _TICKER_RE.findall(text or ""):
         if token in allowed or token in _KNOWN_TOKENS or token in background_tokens:
             continue
         if token not in found:
@@ -393,6 +418,16 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
             2000,
         ),
     }
+    industry_macro = {
+        "packet": state.get("industry_macro_packet") or {},
+        "outlook": _truncate(state.get("industry_outlook"), 1500),
+    }
+    architect = {
+        "choices": overrides.get("architect_choices"),
+        "allowed": overrides.get("architect_allowed"),
+        "views": overrides.get("industry_macro_views"),
+        "instruction": "Flag only. Labels must come from Python menus; ignore any numeric growth the LLM typed.",
+    }
     quant = {
         "valuation_method": pack.get("valuation_method") or state.get("valuation_method"),
         "is_math_verified": bool(state.get("is_math_verified")),
@@ -421,6 +456,8 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
     return {
         "competitive_json": json.dumps(competitive, default=str),
         "qualitative_json": json.dumps(qualitative, default=str),
+        "industry_macro_json": json.dumps(industry_macro, default=str),
+        "architect_json": json.dumps(architect, default=str),
         "reviewer_json": json.dumps(reviewer, default=str),
         "quant_json": json.dumps(quant, default=str),
         "writer_json": json.dumps(writer, default=str),
@@ -649,6 +686,35 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
         "action": qualitative.get("action")
         or ("correct" if summary_text or evidence_findings else "pass"),
         "findings": evidence_findings + _issues(qualitative, "qualitative"),
+    }
+
+    industry_macro = _section(payload, "industry_macro")
+    llm_findings.extend(_issues(industry_macro, "industry_macro"))
+    packet = dict(state.get("industry_macro_packet") or {})
+    macro_narrative = _grounded_text(
+        industry_macro.get("corrected_narrative"),
+        allowed=allowed,
+        background=filing or background,
+    )
+    if macro_narrative:
+        packet = dict(packet)
+        packet["narrative"] = macro_narrative
+        updates["industry_macro_packet"] = packet
+        updates["industry_outlook"] = macro_narrative
+        corrections.append("Replaced industry/macro narrative with auditor-grounded text.")
+        memo_text = _replace_heading_block(memo_text, "### Industry outlook", macro_narrative)
+    agent_blocks["industry_macro"] = {
+        "action": industry_macro.get("action") or ("correct" if macro_narrative else "pass"),
+        "findings": _issues(industry_macro, "industry_macro"),
+    }
+
+    architect_section = _section(payload, "architect")
+    architect_findings = _issues(architect_section, "architect")
+    llm_findings.extend(architect_findings)
+    agent_blocks["architect"] = {
+        "action": architect_section.get("action") or "pass",
+        "findings": architect_findings,
+        "model_not_rewritten": True,
     }
 
     reviewer = _section(payload, "reviewer")

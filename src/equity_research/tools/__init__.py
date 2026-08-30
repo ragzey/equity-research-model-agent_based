@@ -14,6 +14,12 @@ from .firm_classifier import (
 )
 from .market_api import fetch_financial_statements
 from .qual_to_quant import generate_valuation_overrides
+from .assumption_menus import (
+    apply_architect_choices,
+    build_assumption_bundle,
+    clip_terminal_growth,
+    policy_terminal_growth,
+)
 from .sec_api import (
     fetch_latest_10k_sections,
     fetch_latest_10k_text,
@@ -58,6 +64,10 @@ __all__ = [
     "sourced_filing_payload",
     "build_report_pack",
     "build_source_register",
+    "build_assumption_bundle",
+    "apply_architect_choices",
+    "clip_terminal_growth",
+    "policy_terminal_growth",
     "generate_valuation_overrides",
     "get_cik_for_ticker",
     "get_outstanding_bonds_for_ticker",
