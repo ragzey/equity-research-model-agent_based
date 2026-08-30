@@ -7,6 +7,7 @@ from ..agents.assumption_architect import assumption_architect_node
 from ..agents.competitive import competitive_analyst_node
 from ..agents.independent_auditor import independent_auditor_node
 from ..agents.industry_macro import industry_macro_node
+from ..agents.operations import operations_node
 from ..agents.post_quant_reviewer import (
     post_quant_reviewer_node,
     route_after_post_quant_review,
@@ -29,16 +30,18 @@ def build_research_graph():
     Build the current flow.
 
     Competitive and Qualitative run in parallel after aggregation. Industry/macro
-    then writes a structured demand packet. On the FCFF path the assumption
-    architect picks bounded menu labels; the reviewer only accepts or rejects.
-    Quant remains Python for WACC and FCFF. The auditor may correct narrative
-    and clip invented tickers; it may not rewrite DCF or WACC.
+    and operations then run in parallel: demand/cycle versus CCC, working capital,
+    and reinvestment. On the FCFF path the assumption architect picks bounded
+    menu labels; the reviewer only accepts or rejects. Quant remains Python for
+    WACC and FCFF. The auditor may correct narrative and clip invented tickers;
+    it may not rewrite DCF or WACC.
     """
     workflow = StateGraph(EquityResearchState)
     workflow.add_node("aggregator", aggregator_node)
     workflow.add_node("competitive_analyst", competitive_analyst_node)
     workflow.add_node("qualitative_analyst", qualitative_analyst_node)
     workflow.add_node("industry_macro", industry_macro_node)
+    workflow.add_node("operations", operations_node)
     workflow.add_node("valuation_router", valuation_router_node)
     workflow.add_node("assumption_architect", assumption_architect_node)
     workflow.add_node(
@@ -59,7 +62,11 @@ def build_research_graph():
         ["competitive_analyst", "qualitative_analyst"],
         "industry_macro",
     )
-    workflow.add_edge("industry_macro", "valuation_router")
+    workflow.add_edge(
+        ["competitive_analyst", "qualitative_analyst"],
+        "operations",
+    )
+    workflow.add_edge(["industry_macro", "operations"], "valuation_router")
     workflow.add_conditional_edges(
         "valuation_router",
         route_valuation_method,

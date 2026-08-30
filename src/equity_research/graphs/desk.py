@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Optional
 QUALITATIVE = "qualitative_analyst"
 COMPETITIVE = "competitive_analyst"
 INDUSTRY_MACRO = "industry_macro"
+OPERATIONS = "operations"
 ARCHITECT = "assumption_architect"
 REVIEWER = "assumption_reviewer"
 QUANT = "quant_analyst"
@@ -19,6 +20,7 @@ DECISION_KEYS = (
     "high_growth_years",
     "high_growth_rate",
     "terminal_growth_rate",
+    "sales_to_capital",
 )
 
 
@@ -84,6 +86,8 @@ def apply_override_decisions(
 
     audit: List[Dict[str, Any]] = []
     for key in DECISION_KEYS:
+        if key not in baseline and key not in applied:
+            continue
         decision = by_key.get(key) or {}
         action = str(decision.get("action") or "").strip().lower()
         reason = str(decision.get("reason") or "").strip()
@@ -93,6 +97,8 @@ def apply_override_decisions(
                 "Missing or invalid reviewer action; reverted to baseline."
             )
         if action == "reject":
+            if key not in baseline:
+                continue
             applied[key] = revert_value(key, baseline)
             prior = rationales.get(key, "")
             rationales[key] = (

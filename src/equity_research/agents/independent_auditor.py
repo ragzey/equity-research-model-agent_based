@@ -11,9 +11,11 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 from ..agents.post_quant_reviewer import post_quant_reviewer_node
 from ..agents.writer import _fmt_percent, _fmt_usd
+from ..agents.industry_macro import _ground_narrative
 from ..graphs.desk import AUDITOR, WRITER, make_message
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import AUDITOR_SYSTEM, AUDITOR_USER
+from ..tools.operating_cycle import operating_cycle_ledger
 from ..tools.pdf_memo import write_memo_pdf
 from ..tools.report_pack import build_report_pack
 from ..utils.llm_client import LLMCallError, chat_json
@@ -69,6 +71,15 @@ _KNOWN_TOKENS = {
     "US",
     "UK",
     "EU",
+    "CCC",
+    "DSO",
+    "DIO",
+    "DPO",
+    "NWC",
+    "STC",
+    "PPE",
+    "AR",
+    "AP",
 }
 _TICKER_RE = re.compile(r"\b[A-Z]{2,5}\b")
 _PT_RE = re.compile(
@@ -426,7 +437,15 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "choices": overrides.get("architect_choices"),
         "allowed": overrides.get("architect_allowed"),
         "views": overrides.get("industry_macro_views"),
+        "operations_views": overrides.get("operations_views"),
         "instruction": "Flag only. Labels must come from Python menus; ignore any numeric growth the LLM typed.",
+    }
+    operations = {
+        "packet": state.get("operations_packet") or {},
+        "instruction": (
+            "Python CCC/NWC/sales-to-capital metrics are frozen. Flag invented "
+            "working-capital numbers. Correct narrative only against the ledger."
+        ),
     }
     quant = {
         "valuation_method": pack.get("valuation_method") or state.get("valuation_method"),
@@ -458,6 +477,7 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "qualitative_json": json.dumps(qualitative, default=str),
         "industry_macro_json": json.dumps(industry_macro, default=str),
         "architect_json": json.dumps(architect, default=str),
+        "operations_json": json.dumps(operations, default=str),
         "reviewer_json": json.dumps(reviewer, default=str),
         "quant_json": json.dumps(quant, default=str),
         "writer_json": json.dumps(writer, default=str),
@@ -691,10 +711,15 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
     industry_macro = _section(payload, "industry_macro")
     llm_findings.extend(_issues(industry_macro, "industry_macro"))
     packet = dict(state.get("industry_macro_packet") or {})
-    macro_narrative = _grounded_text(
+    macro_ledger = "\n".join(
+        part
+        for part in (filing, json.dumps(packet, default=str))
+        if part
+    )
+    macro_narrative = _ground_narrative(
         industry_macro.get("corrected_narrative"),
-        allowed=allowed,
-        background=filing or background,
+        macro_ledger,
+        allowed,
     )
     if macro_narrative:
         packet = dict(packet)
@@ -706,6 +731,40 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
     agent_blocks["industry_macro"] = {
         "action": industry_macro.get("action") or ("correct" if macro_narrative else "pass"),
         "findings": _issues(industry_macro, "industry_macro"),
+    }
+
+    operations_section = _section(payload, "operations")
+    llm_findings.extend(_issues(operations_section, "operations"))
+    operations_packet = dict(
+        updates.get("operations_packet") or state.get("operations_packet") or {}
+    )
+    ops_ledger = "\n".join(
+        part
+        for part in (
+            filing,
+            json.dumps(operations_packet.get("metrics") or {}, default=str),
+            operating_cycle_ledger(operations_packet.get("metrics") or {}),
+            str(operations_packet.get("narrative") or ""),
+        )
+        if part
+    )
+    operations_narrative = _ground_narrative(
+        operations_section.get("corrected_narrative"),
+        ops_ledger,
+        allowed,
+    )
+    if operations_narrative:
+        operations_packet = dict(operations_packet)
+        operations_packet["narrative"] = operations_narrative
+        updates["operations_packet"] = operations_packet
+        corrections.append("Replaced operations narrative with auditor-grounded text.")
+        memo_text = _replace_heading_block(
+            memo_text, "### Operations commentary", operations_narrative
+        )
+    agent_blocks["operations"] = {
+        "action": operations_section.get("action")
+        or ("correct" if operations_narrative else "pass"),
+        "findings": _issues(operations_section, "operations"),
     }
 
     architect_section = _section(payload, "architect")

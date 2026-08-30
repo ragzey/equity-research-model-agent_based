@@ -25,8 +25,12 @@ _CAPS_RE = re.compile(r"\b[A-Z]{2,5}\b")
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 _KNOWN_CAPS = {
     "CAGR",
+    "CCC",
     "CPI",
     "DCF",
+    "DIO",
+    "DPO",
+    "DSO",
     "EBIT",
     "EBITDA",
     "EU",
@@ -37,7 +41,10 @@ _KNOWN_CAPS = {
     "GAAP",
     "GDP",
     "IFRS",
+    "NWC",
+    "PPE",
     "SEC",
+    "STC",
     "TAM",
     "UK",
     "US",
@@ -84,9 +91,14 @@ def _novel_caps(
 
 
 def _numbers_in_ledger(sentence: str, ledger_text: str) -> bool:
+    """Every number in the sentence must appear as that number in the ledger.
+
+    Substring matches are rejected: 12 does not count as grounded by 120.
+    """
     haystack = (ledger_text or "").replace(",", "")
     for token in _NUMBER_RE.findall((sentence or "").replace(",", "")):
-        if token not in haystack:
+        pattern = rf"(?<![\d.]){re.escape(token)}(?![\d.])"
+        if not re.search(pattern, haystack):
             return False
     return True
 

@@ -405,6 +405,32 @@ function renderSummary(summary) {
       </div>`
     )
     .join("");
+  const operations = summary.operations_packet || {};
+  const opsMetrics = operations.metrics || {};
+  const opsRows = [
+    ["Cash conversion", (operations.cash_conversion || {}).view, (operations.cash_conversion || {}).evidence],
+    ["Working capital", (operations.working_capital || {}).view, (operations.working_capital || {}).evidence],
+    ["Reinvestment", (operations.reinvestment || {}).view, (operations.reinvestment || {}).evidence],
+  ]
+    .filter((row) => row[1] || row[2])
+    .map(
+      ([label, view, evidence]) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(view || "insufficient")}</div>
+        <div>${escapeHtml(evidence || "No excerpt.")}</div>
+      </div>`
+    )
+    .join("");
+  const metricBits = [
+    opsMetrics.ccc_days != null ? `CCC ${Number(opsMetrics.ccc_days).toFixed(1)} days` : "",
+    opsMetrics.nwc_to_sales != null ? `NWC/sales ${(Number(opsMetrics.nwc_to_sales) * 100).toFixed(1)}%` : "",
+    opsMetrics.implied_sales_to_capital != null
+      ? `Implied STC ${Number(opsMetrics.implied_sales_to_capital).toFixed(2)}`
+      : "",
+  ].filter(Boolean);
+  const opsMetricsLine = metricBits.length
+    ? `<p class="hint">${escapeHtml(metricBits.join(" · "))}</p>`
+    : "";
   const architect = summary.architect_choices || {};
   const architectRows = Object.keys(architect)
     .map(
@@ -418,6 +444,9 @@ function renderSummary(summary) {
   $("#panel-desk").innerHTML = `
     <h2>Industry / macro</h2>
     ${driverRows || "<p class='hint'>No industry/macro packet on this memo.</p>"}
+    <h2>Operations / working capital</h2>
+    ${opsMetricsLine}
+    ${opsRows || "<p class='hint'>No operations packet on this memo.</p>"}
     <h2>Architect labels</h2>
     ${architectRows || "<p class='hint'>No architect choices on this memo.</p>"}
     <h2>Independent audit</h2>

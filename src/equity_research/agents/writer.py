@@ -215,6 +215,60 @@ def _industry_driver_table(packet: Dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _operations_driver_table(packet: Dict[str, Any]) -> str:
+    if not packet:
+        return ""
+    metrics = packet.get("metrics") or {}
+    rows = [
+        (
+            "Cash conversion",
+            (packet.get("cash_conversion") or {}).get("view"),
+            (packet.get("cash_conversion") or {}).get("evidence"),
+        ),
+        (
+            "Working capital",
+            (packet.get("working_capital") or {}).get("view"),
+            (packet.get("working_capital") or {}).get("evidence"),
+        ),
+        (
+            "Reinvestment",
+            (packet.get("reinvestment") or {}).get("view"),
+            (packet.get("reinvestment") or {}).get("evidence"),
+        ),
+    ]
+    lines = [
+        "### Operations and working capital",
+        "",
+        "| Driver | View | Ledger evidence |",
+        "|---|---|---|",
+    ]
+    for label, view, evidence in rows:
+        lines.append(
+            f"| {label} | {view or 'insufficient'} | "
+            f"{' '.join(str(evidence or '').split()) or 'n/a'} |"
+        )
+    if metrics.get("ccc_days") is not None:
+        lines.append(
+            f"| Cash conversion cycle | {_fmt_number(metrics.get('ccc_days'), 1)} days | "
+            "Python from AR, inventory, and AP |"
+        )
+    if metrics.get("nwc_to_sales") is not None:
+        lines.append(
+            f"| NWC / sales | {_fmt_percent(metrics.get('nwc_to_sales'))} | "
+            "Python AR + inventory − AP over revenue |"
+        )
+    if metrics.get("implied_sales_to_capital") is not None:
+        lines.append(
+            f"| Implied sales-to-capital | {_fmt_number(metrics.get('implied_sales_to_capital'), 2)} | "
+            "ΔRevenue / Δ(NWC + net PPE) |"
+        )
+    narrative = str(packet.get("narrative") or "").strip()
+    body = "\n".join(lines) + "\n"
+    if narrative:
+        body += f"\n### Operations commentary\n\n{narrative}\n"
+    return body
+
+
 def _wacc_appendix(summary: Dict[str, Any], state: EquityResearchState) -> str:
     inputs = summary.get("valuation_date_inputs") or {}
     classification = summary.get("firm_classification") or {}
@@ -414,6 +468,11 @@ def _synthesize_narratives(state: EquityResearchState, frozen: Dict[str, Any]) -
                         indent=2,
                         default=str,
                     )[:4000],
+                    operations_json=json.dumps(
+                        state.get("operations_packet") or {},
+                        indent=2,
+                        default=str,
+                    )[:4000],
                 ),
             },
         ],
@@ -482,6 +541,7 @@ def _write_gui_sidecar(
         "handoffs": handoffs,
         "peer_selection": state.get("peer_selection"),
         "industry_macro_packet": state.get("industry_macro_packet"),
+        "operations_packet": state.get("operations_packet"),
         "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
         "memo_name": report_path.name,
@@ -539,6 +599,14 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
         "raw_intrinsic_value_per_share": raw_intrinsic,
         "display_intrinsic_value_per_share": display_intrinsic,
         "high_growth_rate": applied.get("high_growth_rate"),
+        "terminal_growth_rate": applied.get("terminal_growth_rate"),
+        "sales_to_capital": applied.get("sales_to_capital"),
+        "ccc_days": ((state.get("operations_packet") or {}).get("metrics") or {}).get(
+            "ccc_days"
+        ),
+        "nwc_to_sales": ((state.get("operations_packet") or {}).get("metrics") or {}).get(
+            "nwc_to_sales"
+        ),
         "valuation_signal": _valuation_signal(
             inputs.get("share_price"),
             raw_intrinsic,
@@ -594,6 +662,7 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
 {narratives["qualitative_narrative"]}
 
 {_industry_driver_table(state.get("industry_macro_packet") or {})}
+{_operations_driver_table(state.get("operations_packet") or {})}
 ### Industry outlook
 
 {narratives["industry_outlook"]}
@@ -604,7 +673,7 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
 
 ## Discounted cash flow
 
-The primary value is a three-stage FCFF DCF. High-growth lasts {applied.get("high_growth_years", "n/a")} years at {_fmt_percent(applied.get("high_growth_rate"))}, then fades over {applied.get("transition_years", "n/a")} years to a {_fmt_percent(applied.get("terminal_margin"))} terminal EBIT margin and {_fmt_percent(applied.get("terminal_growth_rate"))} perpetuity growth. Discounting at a {_fmt_percent(state.get("discount_rate"))} WACC produces {_fmt_usd(pack.get("dcf_value"))} per share. Raw model equity value before the limited-liability display floor is {_fmt_usd(raw_intrinsic)}.
+The primary value is a three-stage FCFF DCF. High-growth lasts {applied.get("high_growth_years", "n/a")} years at {_fmt_percent(applied.get("high_growth_rate"))}, then fades over {applied.get("transition_years", "n/a")} years to a {_fmt_percent(applied.get("terminal_margin"))} terminal EBIT margin and {_fmt_percent(applied.get("terminal_growth_rate"))} perpetuity growth. Reinvestment uses a {_fmt_number(applied.get("sales_to_capital"), 2)} sales-to-capital ratio (ΔRevenue / Δ invested capital, including working capital). Discounting at a {_fmt_percent(state.get("discount_rate"))} WACC produces {_fmt_usd(pack.get("dcf_value"))} per share. Raw model equity value before the limited-liability display floor is {_fmt_usd(raw_intrinsic)}.
 
 ## Comparables
 

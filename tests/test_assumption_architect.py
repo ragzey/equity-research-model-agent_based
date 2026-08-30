@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from equity_research.agents.assumption_architect import assumption_architect_node
 from equity_research.agents.industry_macro import (
+    _ground_narrative,
     industry_macro_node,
     normalize_industry_macro_packet,
 )
@@ -183,7 +184,12 @@ class MenuPolicyTests(unittest.TestCase):
         menus = build_choice_menus(bundle, {}, risk_free_rate=0.04)
         self.assertIn("high", menus["allowed"]["terminal_growth_rate"])
         proposed = apply_architect_choices(
-            bundle, menus, {"terminal_growth_rate": "high"}
+            bundle,
+            menus,
+            {"terminal_growth_rate": "high"},
+            reasons={
+                "terminal_growth_rate": "High-growth lifecycle still compounding above the economy."
+            },
         )
         self.assertAlmostEqual(
             proposed["terminal_growth_rate"], economy_terminal_cap(0.04)
@@ -211,6 +217,10 @@ class MenuPolicyTests(unittest.TestCase):
             bundle,
             menus,
             {"high_growth_rate": "high", "high_growth_years": "extend"},
+            reasons={
+                "high_growth_rate": "Category growth is above history with filing evidence.",
+                "high_growth_years": "Demand inflection is positive in the packet.",
+            },
         )
         low, high = bundle["baseline"]["high_growth_rate_bounds"]
         self.assertAlmostEqual(proposed["high_growth_rate"], high)
@@ -253,6 +263,20 @@ class PacketAndNodeTests(unittest.TestCase):
             "high",
             allowed_growth_choices(packet),
         )
+
+    def test_narrative_rejects_substring_numbers(self):
+        text = _ground_narrative(
+            "Cash conversion is 12 days.",
+            "Cash conversion cycle is 120.0 days.",
+            ["TPR"],
+        )
+        self.assertEqual(text, "")
+        kept = _ground_narrative(
+            "Cash conversion cycle is 120.0 days.",
+            "Cash conversion cycle is 120.0 days.",
+            ["TPR"],
+        )
+        self.assertIn("120.0", kept)
 
     def test_qualitative_prose_cannot_unlock_high_band(self):
         invented = "Gen Z TAM will double the handbag market this decade."
@@ -377,7 +401,12 @@ class PacketAndNodeTests(unittest.TestCase):
             bundle, _constructive_packet(), risk_free_rate=0.04
         )
         state["dcf_overrides"] = apply_architect_choices(
-            bundle, menus, {"high_growth_rate": "high"}
+            bundle,
+            menus,
+            {"high_growth_rate": "high"},
+            reasons={
+                "high_growth_rate": "Above-history category growth with filing evidence."
+            },
         )
         state["industry_macro_packet"] = _constructive_packet()
         mock_chat.return_value = {
@@ -411,8 +440,10 @@ class PacketAndNodeTests(unittest.TestCase):
         graph = build_research_graph()
         edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
         self.assertIn("industry_macro", graph.nodes)
+        self.assertIn("operations", graph.nodes)
         self.assertIn("assumption_architect", graph.nodes)
         self.assertIn(("industry_macro", "valuation_router"), edges)
+        self.assertIn(("operations", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 
 

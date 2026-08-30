@@ -245,6 +245,39 @@ def perform_3stage_dcf_valuation(
     }
 
 
+def _centered_terminal_growth_values(base: float) -> List[float]:
+    """Five perpetuity-growth points around the applied g, clipped to 1.5%–5%."""
+    floor = 0.015
+    cap = 0.05
+    offsets = (-0.01, -0.005, 0.0, 0.005, 0.01)
+    unique: List[float] = []
+    for offset in offsets:
+        value = round(min(cap, max(floor, base + offset)), 6)
+        if not unique or abs(value - unique[-1]) > 1e-9:
+            unique.append(value)
+    step = 0.0025
+    guard = 0
+    while len(unique) < 5 and guard < 24:
+        guard += 1
+        room_up = cap - unique[-1]
+        room_down = unique[0] - floor
+        if room_up >= room_down and room_up > 1e-9:
+            nxt = round(min(cap, unique[-1] + step), 6)
+            if abs(nxt - unique[-1]) > 1e-9:
+                unique.append(nxt)
+            else:
+                step += 0.0025
+        elif room_down > 1e-9:
+            nxt = round(max(floor, unique[0] - step), 6)
+            if abs(nxt - unique[0]) > 1e-9:
+                unique.insert(0, nxt)
+            else:
+                step += 0.0025
+        else:
+            break
+    return unique[:5]
+
+
 def build_dcf_sensitivity_grid(
     *,
     base_revenue: float,
@@ -274,7 +307,7 @@ def build_dcf_sensitivity_grid(
     terminal_rate = _require_finite("base_terminal_wacc", base_terminal_wacc)
     base_growth = _require_finite("base_terminal_growth", base_terminal_growth)
     wacc_values = [base_rate + step for step in (-0.01, -0.005, 0.0, 0.005, 0.01)]
-    growth_values = [0.015, 0.0175, 0.02, 0.0225, 0.025]
+    growth_values = _centered_terminal_growth_values(base_growth)
     values: List[List[Any]] = []
 
     for growth in growth_values:
@@ -313,6 +346,7 @@ def build_dcf_sensitivity_grid(
         "base_terminal_growth": round(base_growth, 6),
         "methodology": (
             "Initial and terminal WACC shift together by -100/-50/0/+50/+100 "
-            "bps; terminal growth spans 1.50%-2.50% in 25 bp steps."
+            "bps; terminal growth is centered on the applied perpetuity g "
+            "(±100/50 bp), clipped to 1.50%–5.00%."
         ),
     }

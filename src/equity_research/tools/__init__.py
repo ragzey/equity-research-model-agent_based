@@ -13,6 +13,7 @@ from .firm_classifier import (
     is_financial_services_firm,
 )
 from .market_api import fetch_financial_statements
+from .operating_cycle import clip_sales_to_capital, measure_operating_cycle
 from .qual_to_quant import generate_valuation_overrides
 from .assumption_menus import (
     apply_architect_choices,
@@ -66,8 +67,10 @@ __all__ = [
     "build_source_register",
     "build_assumption_bundle",
     "apply_architect_choices",
+    "clip_sales_to_capital",
     "clip_terminal_growth",
     "policy_terminal_growth",
+    "measure_operating_cycle",
     "generate_valuation_overrides",
     "get_cik_for_ticker",
     "get_outstanding_bonds_for_ticker",

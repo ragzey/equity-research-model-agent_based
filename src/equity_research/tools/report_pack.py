@@ -278,6 +278,8 @@ def _assumption_rows(
     consensus = state.get("consensus_growth") or {}
     decisions = _decision_map(state)
     details = cost_of_debt.get("details") or {}
+    operations = state.get("operations_packet") or {}
+    cycle_metrics = operations.get("metrics") or (summary.get("operating_cycle") or {})
 
     mix_justification = (
         "DCF is primary because it uses firm-specific growth, margin and "
@@ -380,8 +382,45 @@ def _assumption_rows(
         {
             "item": "Sales-to-capital (high-growth)",
             "value": _fmt_usd(applied.get("sales_to_capital"), 2).replace("$", ""),
-            "justification": "Reinvestment = ΔRevenue / sales-to-capital. Lifecycle default, not a management budget.",
-            "source": "Firm classifier",
+            "justification": str(
+                rationales.get("sales_to_capital")
+                or (
+                    "Reinvestment = ΔRevenue / sales-to-capital. Observed from "
+                    "Δ(NWC + net PPE) when the statements support it; otherwise "
+                    "the firm-type default. Heavy/light only if the operations "
+                    "packet is evidenced."
+                )
+            )
+            + _desk_note(decisions, "sales_to_capital"),
+            "source": (
+                "Operations packet / architect menu / reviewer"
+                if (state.get("dcf_overrides") or {}).get("architect_choices")
+                else "Observed operating cycle / firm classifier"
+            ),
+        },
+        {
+            "item": "Cash conversion cycle",
+            "value": (
+                f"{_finite(cycle_metrics.get('ccc_days')):.1f} days"
+                if _finite(cycle_metrics.get("ccc_days")) is not None
+                else "N/A"
+            ),
+            "justification": str(
+                (operations.get("cash_conversion") or {}).get("evidence")
+                or "DSO + DIO − DPO from the latest two annual statements. "
+                "Python arithmetic; the operations agent may only explain it."
+            ),
+            "source": "Python operating cycle / operations analyst",
+        },
+        {
+            "item": "NWC / sales",
+            "value": _fmt_pct(cycle_metrics.get("nwc_to_sales")),
+            "justification": str(
+                (operations.get("working_capital") or {}).get("evidence")
+                or "Net working capital is AR + inventory − AP. A rising ratio "
+                "absorbs cash as revenue grows and lowers FCFF."
+            ),
+            "source": "Python operating cycle / operations analyst",
         },
         {
             "item": "WACC",

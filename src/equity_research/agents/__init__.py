@@ -5,6 +5,7 @@ from .assumption_architect import assumption_architect_node
 from .competitive import competitive_analyst_node
 from .independent_auditor import independent_auditor_node
 from .industry_macro import industry_macro_node
+from .operations import operations_node
 from .post_quant_reviewer import post_quant_reviewer_node
 from .qualitative import qualitative_analyst_node
 from .quant import fetch_ten_year_treasury_yield, quant_analyst_node
@@ -19,6 +20,7 @@ __all__ = [
     "fetch_ten_year_treasury_yield",
     "independent_auditor_node",
     "industry_macro_node",
+    "operations_node",
     "qualitative_analyst_node",
     "quant_analyst_node",
     "post_quant_reviewer_node",

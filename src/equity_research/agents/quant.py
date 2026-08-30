@@ -15,6 +15,7 @@ from ..tools.firm_classifier import (
     extract_operating_baseline,
 )
 from ..tools.assumption_menus import clip_terminal_growth
+from ..tools.operating_cycle import clip_sales_to_capital
 from ..tools.valuation import calculate_wacc, perform_3stage_dcf_valuation
 
 logger = logging.getLogger("QuantAnalyst")
@@ -201,6 +202,16 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     high_growth_rate = min(max(high_growth_rate, band_low), band_high)
     if not 0.0 <= high_growth_rate <= 0.40:
         raise ValueError("Reviewed high-growth rate must be between 0% and 40%.")
+    sales_to_capital = clip_sales_to_capital(
+        overrides.get("sales_to_capital", assumptions["sales_to_capital"]),
+        assumptions["sales_to_capital"],
+    )
+    stable_sales_to_capital = clip_sales_to_capital(
+        overrides.get(
+            "stable_sales_to_capital", assumptions["stable_sales_to_capital"]
+        ),
+        assumptions["stable_sales_to_capital"],
+    )
 
     base_revenue, base_ebit = extract_operating_baseline(income_statement)
     total_debt, cash, cash_missing = extract_debt_and_cash(balance_sheet)
@@ -247,7 +258,7 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     dcf_results = perform_3stage_dcf_valuation(
         base_revenue=base_revenue,
         base_ebit=base_ebit,
-        sales_to_capital=assumptions["sales_to_capital"],
+        sales_to_capital=sales_to_capital,
         high_growth_rate=high_growth_rate,
         wacc=wacc,
         terminal_wacc=terminal_wacc,
@@ -258,7 +269,7 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
         transition_years=assumptions["transition_years"],
         terminal_growth_rate=terminal_growth,
         terminal_margin=terminal_margin,
-        stable_sales_to_capital=assumptions["stable_sales_to_capital"],
+        stable_sales_to_capital=stable_sales_to_capital,
         marginal_tax_rate=MARGINAL_TAX_RATE,
     )
 
@@ -283,6 +294,9 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
             },
             "firm_classification": assumptions,
             "dcf_overrides_applied": overrides or None,
+            "operating_cycle": (
+                (state.get("operations_packet") or {}).get("metrics") or {}
+            ),
             "applied_dcf_assumptions": {
                 "base_revenue": base_revenue,
                 "base_ebit": base_ebit,
@@ -290,10 +304,8 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
                 "transition_years": assumptions["transition_years"],
                 "terminal_margin": terminal_margin,
                 "high_growth_rate": high_growth_rate,
-                "sales_to_capital": assumptions["sales_to_capital"],
-                "stable_sales_to_capital": assumptions[
-                    "stable_sales_to_capital"
-                ],
+                "sales_to_capital": sales_to_capital,
+                "stable_sales_to_capital": stable_sales_to_capital,
                 "terminal_growth_rate": terminal_growth,
                 "terminal_wacc": terminal_wacc,
             },

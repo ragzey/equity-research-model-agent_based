@@ -45,6 +45,7 @@ def _llm_decisions(
         "high_growth_years": baseline.get("high_growth_years"),
         "high_growth_rate": baseline.get("high_growth_rate"),
         "terminal_growth_rate": baseline.get("terminal_growth_rate"),
+        "sales_to_capital": baseline.get("sales_to_capital"),
         "company_specific_risk_premium": 0.0,
     }
     compact_proposed = {
@@ -55,6 +56,8 @@ def _llm_decisions(
             "high_growth_years",
             "high_growth_rate",
             "terminal_growth_rate",
+            "sales_to_capital",
+            "stable_sales_to_capital",
         )
     }
     compact_proposed["rationales"] = proposed.get("rationales")
@@ -72,6 +75,11 @@ def _llm_decisions(
         ),
         packet_json=json.dumps(
             state.get("industry_macro_packet") or {},
+            indent=2,
+            default=str,
+        )[:6000],
+        operations_json=json.dumps(
+            state.get("operations_packet") or {},
             indent=2,
             default=str,
         )[:6000],
@@ -116,6 +124,8 @@ def valuation_assumption_reviewer_node(
         "high_growth_years": baseline["high_growth_years"],
         "high_growth_rate": baseline["high_growth_rate"],
         "terminal_growth_rate": baseline["terminal_growth_rate"],
+        "sales_to_capital": baseline.get("sales_to_capital"),
+        "stable_sales_to_capital": baseline.get("stable_sales_to_capital"),
     }
 
     llm_payload = _llm_decisions(state, baseline, proposed)
@@ -136,11 +146,24 @@ def valuation_assumption_reviewer_node(
         decisions,
         mode="llm",
     )
+    stc_row = next(
+        (
+            row
+            for row in overrides.get("decisions") or []
+            if row.get("key") == "sales_to_capital"
+        ),
+        None,
+    )
+    if stc_row and stc_row.get("action") == "reject":
+        overrides["stable_sales_to_capital"] = baseline_for_revert.get(
+            "stable_sales_to_capital"
+        )
     for carry in (
         "architect_choices",
         "architect_menus",
         "architect_allowed",
         "industry_macro_views",
+        "operations_views",
         "baseline_firm_type",
     ):
         if proposed.get(carry) is not None:

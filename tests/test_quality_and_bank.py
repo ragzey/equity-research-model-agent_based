@@ -93,6 +93,28 @@ class SensitivityTests(unittest.TestCase):
         self.assertEqual(len(grid["wacc_values"]), 5)
         self.assertEqual(len(grid["terminal_growth_values"]), 5)
         self.assertTrue(all(len(row) == 5 for row in grid["intrinsic_value_per_share"]))
+        self.assertIn(0.025, grid["terminal_growth_values"])
+        self.assertGreaterEqual(min(grid["terminal_growth_values"]), 0.015)
+        self.assertLessEqual(max(grid["terminal_growth_values"]), 0.05)
+
+    def test_growth_grid_centers_on_applied_terminal_g(self):
+        grid = build_dcf_sensitivity_grid(
+            base_revenue=100,
+            base_ebit=15,
+            sales_to_capital=1.5,
+            high_growth_rate=0.10,
+            base_wacc=0.10,
+            base_terminal_wacc=0.08,
+            base_terminal_growth=0.04,
+            shares_outstanding=10,
+            total_debt=20,
+            cash_and_equivalents=10,
+            high_growth_years=3,
+            transition_years=3,
+            terminal_margin=0.12,
+            stable_sales_to_capital=2.0,
+        )
+        self.assertEqual(grid["terminal_growth_values"], [0.03, 0.035, 0.04, 0.045, 0.05])
 
 
 if __name__ == "__main__":

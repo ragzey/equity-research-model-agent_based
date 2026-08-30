@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .consensus import blend_high_growth_rate
@@ -9,6 +10,7 @@ from .firm_classifier import (
     classify_firm_and_adjust_assumptions,
     extract_operating_baseline,
 )
+from .operating_cycle import clip_sales_to_capital, measure_operating_cycle
 from .qual_to_quant import generate_valuation_overrides
 
 TERMINAL_GROWTH_FLOOR = 0.015
@@ -21,6 +23,8 @@ YEAR_CHOICES = ("compress", "base", "extend")
 TERMINAL_GROWTH_CHOICES = ("low", "base", "high")
 MARGIN_CHOICES = ("baseline", "proposed")
 CSRP_CHOICES = ("none", "proposed")
+STC_CHOICES = ("heavy", "base", "light")
+_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 
 
 def is_high_growth_lifecycle(firm_type: Optional[str]) -> bool:
@@ -156,6 +160,39 @@ def allowed_terminal_growth_choices(
     return allowed
 
 
+def allowed_stc_choices(operations_packet: Optional[Dict[str, Any]]) -> List[str]:
+    """Heavy/light reinvestment only when the operations packet is evidenced."""
+    allowed = ["base"]
+    packet = operations_packet or {}
+    wc = packet.get("working_capital") or {}
+    ccc = packet.get("cash_conversion") or {}
+    reinvest = packet.get("reinvestment") or {}
+    absorbing = _view(wc) == "absorbing" or _view(ccc) == "lengthening" or _view(reinvest) == "heavy"
+    releasing = (
+        _view(wc) == "releasing"
+        or _view(ccc) == "shortening"
+        or _view(reinvest) == "asset_light"
+    )
+    evidenced = _has_evidence(wc) or _has_evidence(ccc) or _has_evidence(reinvest)
+    if absorbing and evidenced:
+        allowed.append("heavy")
+    if releasing and evidenced and not absorbing:
+        allowed.append("light")
+    return allowed
+
+
+def _reason_numbers_in_ledger(reason: str, ledger: str) -> bool:
+    """Invented figures in stretch-label reasons cannot unlock the label."""
+    if not ledger:
+        return True
+    haystack = ledger.replace(",", "")
+    for token in _NUMBER_RE.findall((reason or "").replace(",", "")):
+        pattern = rf"(?<![\d.]){re.escape(token)}(?![\d.])"
+        if not re.search(pattern, haystack):
+            return False
+    return True
+
+
 def resolve_labeled_choice(
     raw: Any,
     allowed: Sequence[str],
@@ -244,6 +281,30 @@ def build_assumption_bundle(
     )
     proposed["high_growth_rate"] = growth_rate
     proposed.setdefault("rationales", {})["high_growth_rate"] = growth_rationale
+    cycle = measure_operating_cycle(
+        state.get("income_statement"),
+        state.get("balance_sheet"),
+        classifier_sales_to_capital=baseline.get("sales_to_capital"),
+    )
+    baseline["operating_cycle"] = cycle
+    if cycle.get("observed_sales_to_capital") is not None:
+        baseline["sales_to_capital"] = cycle["observed_sales_to_capital"]
+        baseline["sales_to_capital_source"] = cycle.get("source")
+    proposed["sales_to_capital"] = clip_sales_to_capital(
+        baseline.get("sales_to_capital"), 1.8
+    )
+    proposed["stable_sales_to_capital"] = clip_sales_to_capital(
+        max(
+            float(proposed["sales_to_capital"]),
+            float(baseline.get("stable_sales_to_capital") or proposed["sales_to_capital"]),
+        ),
+        proposed["sales_to_capital"],
+    )
+    proposed.setdefault("rationales", {})["sales_to_capital"] = (
+        f"Sales-to-capital {proposed['sales_to_capital']:.2f} from "
+        f"{baseline.get('sales_to_capital_source') or 'firm-type default'}. "
+        "FCFF reinvestment = ΔRevenue / sales-to-capital (working capital + net PPE)."
+    )
     packet = state.get("industry_macro_packet") or {}
     firm_type = baseline.get("firm_type")
     terminal_g = policy_terminal_growth(
@@ -266,6 +327,7 @@ def build_choice_menus(
     packet: Optional[Dict[str, Any]] = None,
     *,
     risk_free_rate: Optional[float] = None,
+    operations_packet: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Discrete labeled candidates. High/extend are omitted when evidence is thin."""
     baseline = bundle["baseline"]
@@ -306,6 +368,16 @@ def build_choice_menus(
         "none": 0.0,
         "proposed": float(proposed.get("company_specific_risk_premium") or 0.0),
     }
+    base_stc = clip_sales_to_capital(proposed.get("sales_to_capital"), 1.8)
+    stc_menu = {
+        "heavy": clip_sales_to_capital(base_stc * 0.75, base_stc),
+        "base": base_stc,
+        "light": clip_sales_to_capital(base_stc * 1.25, base_stc),
+    }
+    if abs(stc_menu["heavy"] - stc_menu["base"]) < 1e-9:
+        stc_menu.pop("heavy", None)
+    if abs(stc_menu["light"] - stc_menu["base"]) < 1e-9:
+        stc_menu.pop("light", None)
 
     allowed = {
         "high_growth_rate": [
@@ -317,6 +389,7 @@ def build_choice_menus(
         "terminal_growth_rate": list(terminal_menu.keys()),
         "terminal_margin": list(MARGIN_CHOICES),
         "company_specific_risk_premium": list(CSRP_CHOICES),
+        "sales_to_capital": [key for key in STC_CHOICES if key in stc_menu],
     }
     allowed["high_growth_rate"] = [
         key for key in allowed["high_growth_rate"] if key in allowed_growth_choices(packet)
@@ -329,6 +402,11 @@ def build_choice_menus(
         {"terminal_growth_rate": terminal_menu},
         firm_type=firm_type,
     )
+    allowed["sales_to_capital"] = [
+        key
+        for key in allowed["sales_to_capital"]
+        if key in allowed_stc_choices(operations_packet)
+    ]
     if abs(margin_menu["baseline"] - margin_menu["proposed"]) < 1e-12:
         allowed["terminal_margin"] = ["baseline"]
     if csrp_menu["proposed"] <= 0:
@@ -340,6 +418,7 @@ def build_choice_menus(
         "terminal_growth_rate": terminal_menu,
         "terminal_margin": margin_menu,
         "company_specific_risk_premium": csrp_menu,
+        "sales_to_capital": stc_menu,
         "allowed": allowed,
     }
 
@@ -350,6 +429,7 @@ def apply_architect_choices(
     raw_choices: Optional[Dict[str, Any]],
     *,
     reasons: Optional[Dict[str, Any]] = None,
+    ledger_text: str = "",
 ) -> Dict[str, Any]:
     """Translate labeled choices into clipped numbers. Ignore any LLM floats."""
     proposed = dict(bundle["proposed"])
@@ -366,16 +446,30 @@ def apply_architect_choices(
         ("terminal_growth_rate", "terminal_growth_rate", "base"),
         ("terminal_margin", "terminal_margin", "baseline"),
         ("company_specific_risk_premium", "company_specific_risk_premium", "none"),
+        ("sales_to_capital", "sales_to_capital", "base"),
     ]
+    needs_reason = {"high", "extend", "heavy", "light", "proposed"}
     for key, menu_name, default in specs:
         menu = menus.get(menu_name) or {}
+        if not menu:
+            continue
         permitted: Iterable[str] = allowed.get(key) or list(menu.keys())
         label = resolve_labeled_choice(choices.get(key), list(permitted), default=default)
+        reason = str(notes.get(key) or "").strip()
+        if "http://" in reason.lower() or "https://" in reason.lower():
+            reason = ""
+        if label in needs_reason and (
+            not reason or not _reason_numbers_in_ledger(reason, ledger_text)
+        ):
+            label = default if default in menu else next(iter(menu), default)
+            reason = (
+                "Fell back to the base label because the architect did not cite "
+                "ledger evidence."
+            )
         if label not in menu:
             label = default if default in menu else next(iter(menu), default)
         applied_labels[key] = label
         proposed[key] = menu[label]
-        reason = str(notes.get(key) or "").strip()
         rationales[key] = (
             f"Assumption architect chose '{label}' → {proposed[key]}. "
             f"Allowed labels: {', '.join(permitted)}. "
@@ -383,6 +477,20 @@ def apply_architect_choices(
         ).strip()
         if key == "high_growth_years":
             rationales["high_growth_horizon"] = rationales[key]
+        if key == "sales_to_capital":
+            stable = clip_sales_to_capital(
+                max(float(proposed[key]), float(baseline.get("stable_sales_to_capital") or proposed[key])),
+                proposed[key],
+            )
+            if label == "heavy":
+                stable = clip_sales_to_capital(proposed[key] * 1.10, proposed[key])
+            elif label == "light":
+                stable = clip_sales_to_capital(proposed[key] * 1.05, proposed[key])
+            proposed["stable_sales_to_capital"] = stable
+            rationales["stable_sales_to_capital"] = (
+                f"Stable sales-to-capital {stable:.2f} follows the '{label}' "
+                "reinvestment choice."
+            )
 
     proposed["rationales"] = rationales
     proposed["architect_choices"] = applied_labels
@@ -394,6 +502,7 @@ def apply_architect_choices(
             "terminal_growth_rate",
             "terminal_margin",
             "company_specific_risk_premium",
+            "sales_to_capital",
         )
         if key in menus
     }

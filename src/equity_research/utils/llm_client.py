@@ -46,7 +46,7 @@ MISSING_KEY_MESSAGE = (
     "This research desk requires an OpenAI or Gemini API key for agent reasoning. "
     "Paste a key in the GUI, pass --openai-api-key, or set OPENAI_API_KEY / "
     "GEMINI_API_KEY. WACC and DCF stay in Python; Competitive, Qualitative, "
-    "the industry/macro analyst, the assumption architect, the assumption "
+    "the industry/macro analyst, the operations analyst, the assumption architect, the assumption "
     "reviewer, the writer, and the independent auditor must call the model."
 )
 

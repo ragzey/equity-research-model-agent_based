@@ -45,6 +45,7 @@ class EquityResearchState(TypedDict):
     peer_selection: Optional[Dict[str, Any]]  # Competitive analyst keep/drop rationale
     industry_outlook: Optional[str]  # Industry/macro demand narrative
     industry_macro_packet: Optional[Dict[str, Any]]  # Structured category/cycle/macro views
+    operations_packet: Optional[Dict[str, Any]]  # CCC, NWC, reinvestment views + metrics
     dcf_overrides: Optional[Dict[str, Any]]  # Architect candidates after reviewer veto
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid
     agent_messages: Annotated[List[Dict[str, Any]], operator.add]  # Desk handoffs (append-only)

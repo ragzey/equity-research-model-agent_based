@@ -15,6 +15,7 @@ from ..tools.assumption_menus import (
     build_assumption_bundle,
     build_choice_menus,
 )
+from ..tools.operating_cycle import operating_cycle_ledger
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("AssumptionArchitect")
@@ -25,9 +26,13 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
     ticker = str(state.get("ticker") or "").strip().upper()
     risk_free_rate = fetch_ten_year_treasury_yield()
     packet = state.get("industry_macro_packet") or {}
+    operations = state.get("operations_packet") or {}
     bundle = build_assumption_bundle(state, risk_free_rate=risk_free_rate)
     menus = build_choice_menus(
-        bundle, packet, risk_free_rate=risk_free_rate
+        bundle,
+        packet,
+        risk_free_rate=risk_free_rate,
+        operations_packet=operations,
     )
     compact_menus = {
         "menus": {
@@ -38,7 +43,9 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
                 "terminal_growth_rate",
                 "terminal_margin",
                 "company_specific_risk_premium",
+                "sales_to_capital",
             )
+            if key in menus
         },
         "allowed": menus.get("allowed"),
     }
@@ -61,6 +68,12 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
                             ),
                             "high_growth_years": bundle["baseline"].get("high_growth_years"),
                             "terminal_margin": bundle["baseline"].get("terminal_margin"),
+                            "sales_to_capital": bundle["baseline"].get("sales_to_capital"),
+                            "operating_cycle": {
+                                "ccc_days": (bundle["baseline"].get("operating_cycle") or {}).get("ccc_days"),
+                                "nwc_to_sales": (bundle["baseline"].get("operating_cycle") or {}).get("nwc_to_sales"),
+                                "implied_sales_to_capital": (bundle["baseline"].get("operating_cycle") or {}).get("implied_sales_to_capital"),
+                            },
                         },
                         indent=2,
                         default=str,
@@ -74,12 +87,15 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
                                 "terminal_margin",
                                 "terminal_growth_rate",
                                 "company_specific_risk_premium",
+                                "sales_to_capital",
+                                "stable_sales_to_capital",
                             )
                         },
                         indent=2,
                         default=str,
                     ),
                     packet_json=json.dumps(packet, indent=2, default=str)[:6000],
+                    operations_json=json.dumps(operations, indent=2, default=str)[:6000],
                     menus_json=json.dumps(compact_menus, indent=2, default=str),
                 ),
             },
@@ -89,11 +105,28 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
     )
     if not payload:
         raise LLMCallError("Assumption architect did not return a JSON object.")
+    excerpts = "\n".join(
+        str(item.get("excerpt") or "")
+        for item in (state.get("qualitative_evidence") or [])
+        if isinstance(item, dict)
+    )
+    choice_ledger = "\n".join(
+        part
+        for part in (
+            json.dumps(packet, default=str),
+            json.dumps(operations, default=str),
+            json.dumps(compact_menus, default=str),
+            operating_cycle_ledger(bundle["baseline"].get("operating_cycle") or {}),
+            excerpts,
+        )
+        if part
+    )
     proposed = apply_architect_choices(
         bundle,
         menus,
         payload,
         reasons=payload.get("reasons") if isinstance(payload, dict) else None,
+        ledger_text=choice_ledger,
     )
     proposed["industry_macro_views"] = {
         "category_growth": (packet.get("category_growth") or {}).get("view"),
@@ -101,11 +134,17 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
         "demand_inflection": (packet.get("demand_inflection") or {}).get("direction"),
         "rates_view": (packet.get("macro") or {}).get("rates_view"),
     }
+    proposed["operations_views"] = {
+        "cash_conversion": (operations.get("cash_conversion") or {}).get("view"),
+        "working_capital": (operations.get("working_capital") or {}).get("view"),
+        "reinvestment": (operations.get("reinvestment") or {}).get("view"),
+    }
     choices = proposed.get("architect_choices") or {}
     body = (
         f"{ticker} architect labels: growth={choices.get('high_growth_rate')}, "
         f"years={choices.get('high_growth_years')}, "
-        f"g={choices.get('terminal_growth_rate')}."
+        f"g={choices.get('terminal_growth_rate')}, "
+        f"stc={choices.get('sales_to_capital')}."
     )
     messages = [
         make_message(

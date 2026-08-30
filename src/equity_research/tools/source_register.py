@@ -62,7 +62,7 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
             ),
             "Yahoo Finance (yfinance)",
             "",
-            "Aggregator, Quant, report pack",
+            "Aggregator, Quant, operating-cycle metrics, report pack",
         )
     )
     if inputs.get("cash_field_missing"):
@@ -216,7 +216,7 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
         _row(
             "Narrative agents",
             (
-                "Competitive, Qualitative, industry/macro, assumption architect, "
+                "Competitive, Qualitative, industry/macro, operations, assumption architect, "
                 "assumption reviewer, writer, and independent auditor call OpenAI or "
                 "Gemini on ledger evidence. They may not invent tickers, URLs, or DCF "
                 "inputs. The architect may only pick Python menu labels. The auditor "
