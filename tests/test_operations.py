@@ -268,6 +268,17 @@ class OperationsPacketTests(unittest.TestCase):
         mock_chat.assert_called_once()
         self.assertTrue(mock_chat.call_args.kwargs.get("required"))
 
+    @patch("equity_research.agents.operations.chat_json")
+    def test_financial_firm_skips_llm_and_ccc(self, mock_chat):
+        state = initial_state("JPM", "2026")
+        state["is_financial"] = True
+        result = operations_node(state)
+        mock_chat.assert_not_called()
+        packet = result["operations_packet"]
+        self.assertEqual(packet["cash_conversion"]["view"], "insufficient")
+        self.assertEqual(packet["working_capital"]["view"], "insufficient")
+        self.assertIsNone(packet["metrics"]["ccc_days"])
+
     def test_inventory_without_cogs_does_not_zero_ccc(self):
         income = {
             datetime(2025, 12, 31): {"Total Revenue": 100.0},

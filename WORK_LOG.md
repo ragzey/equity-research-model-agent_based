@@ -637,3 +637,16 @@ removed. The production model is three-stage FCFF for non-financial operating
 companies. Yahoo Financial Services / Financials tickers skip valuation and
 write a restrained out-of-scope memo instead of inventing RWA or CET1.
 
+## 26. Operations packet and evidenced sales-to-capital (2026-08-30)
+
+Working-capital and reinvestment inputs are no longer a firm-type constant.
+
+- Python measures CCC, NWC/sales, and implied sales-to-capital from statements.
+- The operations agent explains those metrics; it cannot replace them.
+- The architect only picks heavy/base/light STC from a menu around the
+  observed ratio. Stretch labels need a ledger reason with real numbers.
+- Banks skip the operations LLM and do not compute a corporate CCC.
+- Sensitivity terminal growth is centered on the applied perpetuity, not a
+  fixed 1.50%–2.50% band.
+- `README.md` matches the live desk graph.
+

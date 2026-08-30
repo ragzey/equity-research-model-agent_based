@@ -68,17 +68,20 @@ When TRACE data is empty, illiquid, or unavailable:
 | Markdown + PDF memo | `agents/writer.py`, `tools/pdf_memo.py` | ✅ presentation PDF beside the Markdown |
 | Data Aggregator node | `agents/aggregator.py` | ✅ |
 | Quant Analyst node | `agents/quant.py` | ✅ live `^TNX`, logs pathway |
-| Competitive Analyst node | `agents/competitive.py` | ✅ peer matrix + industry outlook |
+| Competitive Analyst node | `agents/competitive.py` | ✅ harvested/pinned comps; no invented tickers |
 | Qualitative Analyst node | `agents/qualitative.py` | ✅ evidence-only synthesis + section-tagged quotes |
-| Peer metrics tool | `tools/peer_analysis.py` | ✅ yfinance relative valuation |
-| Qual → Quant reviewer | `tools/qual_to_quant.py`, `agents/reviewer.py` | ✅ Python proposes bounded candidates; desk agent accept/reject |
-| Research desk handoffs | `graphs/desk.py`, `agent_messages` | ✅ Qual / Competitive / Reviewer / Writer messages |
-| LangGraph `StateGraph` | `graphs/graph.py` | ✅ compiled and end-to-end tested |
+| Industry / macro node | `agents/industry_macro.py` | ✅ categorical demand/cycle packet; filing-grounded |
+| Operations node | `agents/operations.py`, `tools/operating_cycle.py` | ✅ Python CCC/NWC/STC; skipped for financials |
+| Assumption architect | `agents/assumption_architect.py`, `tools/assumption_menus.py` | ✅ labeled menus only; stretch labels need ledger reasons |
+| Qual → Quant reviewer | `agents/reviewer.py` | ✅ accept/reject only; no invented DCF numbers |
+| Independent auditor | `agents/independent_auditor.py` | ✅ per-agent narrative check; cannot rewrite WACC/DCF |
+| Research desk handoffs | `graphs/desk.py`, `agent_messages` | ✅ Qual / Competitive / Industry / Operations / Architect / Reviewer / Writer |
+| LangGraph `StateGraph` | `graphs/graph.py` | ✅ compiled and tested |
 | OpenBB gateway | — | ⏳ planned |
-| Firm lifecycle classifier | `tools/firm_classifier.py` | ✅ bounded, transparent policy assumptions |
+| Firm lifecycle classifier | `tools/firm_classifier.py` | ✅ bounded fallback when statements cannot support STC |
 | WACC + 3-stage FCFF DCF | `tools/valuation.py`, `agents/quant.py` | ✅ |
 | Post-Quant arithmetic review | `agents/post_quant_reviewer.py` | ✅ bounded retry + FCFF durability diagnostics |
-| 5x5 DCF sensitivity | `agents/sensitivity.py` | ✅ serializable WACC/g grid |
+| 5x5 DCF sensitivity | `agents/sensitivity.py` | ✅ WACC ±100 bp; *g* centered on applied perpetuity |
 | Financial-firm scope gate | `tools/firm_classifier.py`, `agents/valuation_router.py` | ✅ FCFF withheld; banks/insurers/brokers out of scope |
 
 ### Design correction vs. generic tutorials
@@ -92,32 +95,51 @@ When TRACE data is empty, illiquid, or unavailable:
 ```
 src/equity_research/
 ├── agents/
-│   ├── aggregator.py   # Data pull → state
-│   ├── competitive.py  # Peer benchmarking + industry outlook
-│   ├── qualitative.py  # Item 1A / Item 7 evidence synthesis
-│   ├── valuation_router.py  # FCFF vs out-of-scope financials
-│   ├── reviewer.py     # Reviewed qualitative → DCF overrides
-│   ├── quant.py        # WACC + DCF
+│   ├── aggregator.py
+│   ├── competitive.py
+│   ├── qualitative.py
+│   ├── industry_macro.py
+│   ├── operations.py
+│   ├── assumption_architect.py
+│   ├── valuation_router.py
+│   ├── reviewer.py
+│   ├── quant.py
 │   ├── post_quant_reviewer.py
 │   ├── sensitivity.py
-│   └── writer.py
+│   ├── writer.py
+│   └── independent_auditor.py
 ├── graphs/
-│   ├── state.py        # Shared ledger schema
-│   ├── defaults.py     # initial_state() factory
-│   └── graph.py        # Compiled LangGraph workflow
+│   ├── state.py
+│   ├── defaults.py
+│   ├── desk.py
+│   └── graph.py
 └── tools/
-    ├── market_api.py   # Yahoo Finance
-    ├── cache.py        # SQLite TTL cache
-    ├── consensus.py    # Labeled Yahoo growth overlay
+    ├── market_api.py
+    ├── cache.py
+    ├── consensus.py
+    ├── operating_cycle.py
+    ├── assumption_menus.py
     ├── bond_identifiers.py
     ├── pdf_memo.py
-    ├── sec_api.py      # SEC EDGAR
-    ├── finnhub_bond.py # Finnhub TRACE
+    ├── sec_api.py
+    ├── finnhub_bond.py
     ├── firm_classifier.py
     ├── peer_analysis.py
     ├── qual_to_quant.py
     ├── debt_analysis.py
-    └── valuation.py     # WACC + three-stage FCFF
+    └── valuation.py
+```
+
+Current FCFF path:
+
+```text
+Aggregator
+  → Competitive ∥ Qualitative
+  → Industry/macro ∥ Operations
+  → Router (financials stop)
+  → Architect (labels) → Reviewer (accept/reject)
+  → Quant (Python WACC + FCFF)
+  → Post-quant → Sensitivity → Writer → Auditor
 ```
 
 ## Setup
@@ -133,7 +155,7 @@ SEC_USER_AGENT="MyResearchProject/1.0 (replace-with-your-real-email)"
 ```
 Replace the placeholder with a monitored contact address before querying EDGAR.
 
-**LLM (required for Competitive, Qualitative, Reviewer, Writer):** OpenAI (`OPENAI_API_KEY`, `sk-…`) or Gemini from [Google AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` or `GOOGLE_API_KEY`, `AIza…`). Paste the key in the GUI, or:
+**LLM (required for Competitive, Qualitative, industry/macro, operations, architect, reviewer, writer, auditor):** OpenAI (`OPENAI_API_KEY`, `sk-…`) or Gemini from [Google AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` or `GOOGLE_API_KEY`, `AIza…`). Paste the key in the GUI, or:
 
 ```
 python main.py --ticker TJX --openai-api-key AIza... --llm-provider gemini
@@ -149,7 +171,7 @@ FINNHUB_API_KEY=your_finnhub_key
 ## Run the compiled pipeline
 
 ```powershell
-python main.py --ticker MSFT --peers AAPL GOOGL AMZN
+python main.py --ticker MSFT
 ```
 
 ### GUI
@@ -179,34 +201,8 @@ such as MSFT, AAPL, or GOOGL.
 ## Component tests
 
 ```powershell
-# SEC 10-K excerpt
-python test_tool.py
-
-# Aggregator → Quant chain
 $env:PYTHONPATH = "$PWD\src"
-python -c "
-from equity_research.graphs.defaults import initial_state
-from equity_research.agents.aggregator import aggregator_node
-from equity_research.agents.quant import quant_analyst_node
-
-state = initial_state('MSFT', '2025')
-state.update(aggregator_node(state))
-state.update(quant_analyst_node(state))
-print(state['valuation_summary']['cost_of_debt'])
-"
-
-# Competitive Analyst (peer benchmarking)
-python -c "
-from equity_research.graphs.defaults import initial_state
-from equity_research.agents.aggregator import aggregator_node
-from equity_research.agents.competitive import competitive_analyst_node
-
-state = initial_state('MSFT', '2025', competitor_tickers=['GOOGL', 'AAPL', 'ORCL'])
-state.update(aggregator_node(state))
-state.update(competitive_analyst_node(state))
-print(state['peer_comparison_matrix']['peer_medians'])
-print(state['industry_outlook'][:500])
-"
+python -m unittest discover -s tests -q
 ```
 
 ## Bond ISINs

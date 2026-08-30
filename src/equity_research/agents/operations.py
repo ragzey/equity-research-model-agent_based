@@ -137,9 +137,50 @@ def _classifier_stc(state: EquityResearchState) -> Optional[float]:
     return float(baseline.get("sales_to_capital") or 0) or None
 
 
+def _insufficient_packet(reason: str) -> Dict[str, Any]:
+    metrics = {
+        key: None
+        for key in (
+            "ccc_days",
+            "dso_days",
+            "dio_days",
+            "dpo_days",
+            "nwc",
+            "nwc_to_sales",
+            "delta_nwc",
+            "implied_sales_to_capital",
+            "observed_sales_to_capital",
+        )
+    }
+    metrics["capital_released_on_growth"] = False
+    metrics["source"] = reason
+    block = {"view": "insufficient", "evidence": reason}
+    return {
+        "metrics": metrics,
+        "cash_conversion": dict(block),
+        "working_capital": dict(block),
+        "reinvestment": dict(block),
+        "narrative": reason,
+    }
+
+
 def operations_node(state: EquityResearchState) -> Dict[str, Any]:
     """Write a metric-first operations packet used by the architect."""
     ticker = str(state.get("ticker") or "").strip().upper()
+    if state.get("is_financial") or state.get("valuation_method") == "unsupported_financial":
+        reason = (
+            "Working-capital CCC and sales-to-capital are not defined for this "
+            "FCFF desk on banks, insurers, brokers, or other financial firms."
+        )
+        packet = _insufficient_packet(reason)
+        body = f"{ticker} operations skipped: financial firm out of FCFF scope."
+        logger.info(body)
+        return {
+            "operations_packet": packet,
+            "agent_messages": [
+                make_message(OPERATIONS, WRITER, "operations_narrative", reason, {}),
+            ],
+        }
     classifier_stc = _classifier_stc(state)
     metrics = measure_operating_cycle(
         state.get("income_statement"),

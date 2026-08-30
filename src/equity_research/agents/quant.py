@@ -202,15 +202,23 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     high_growth_rate = min(max(high_growth_rate, band_low), band_high)
     if not 0.0 <= high_growth_rate <= 0.40:
         raise ValueError("Reviewed high-growth rate must be between 0% and 40%.")
+    ops_stc = ((state.get("operations_packet") or {}).get("metrics") or {}).get(
+        "observed_sales_to_capital"
+    )
+    stc_fallback = (
+        ops_stc if ops_stc is not None else assumptions["sales_to_capital"]
+    )
+    stable_fallback = max(
+        float(stc_fallback),
+        float(assumptions.get("stable_sales_to_capital") or stc_fallback),
+    )
     sales_to_capital = clip_sales_to_capital(
-        overrides.get("sales_to_capital", assumptions["sales_to_capital"]),
-        assumptions["sales_to_capital"],
+        overrides.get("sales_to_capital", stc_fallback),
+        stc_fallback,
     )
     stable_sales_to_capital = clip_sales_to_capital(
-        overrides.get(
-            "stable_sales_to_capital", assumptions["stable_sales_to_capital"]
-        ),
-        assumptions["stable_sales_to_capital"],
+        overrides.get("stable_sales_to_capital", stable_fallback),
+        stable_fallback,
     )
 
     base_revenue, base_ebit = extract_operating_baseline(income_statement)
