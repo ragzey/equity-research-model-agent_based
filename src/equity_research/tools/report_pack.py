@@ -227,6 +227,7 @@ def _identity(state: Dict[str, Any]) -> Dict[str, Optional[str]]:
             meta.get("industry") or info.get("industry") or classification.get("industry")
         ),
         "country": meta.get("country") or info.get("country"),
+        "exchange": info.get("fullExchangeName") or info.get("exchange"),
     }
 
 

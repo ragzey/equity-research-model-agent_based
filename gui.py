@@ -25,6 +25,10 @@ if str(SRC_ROOT) not in sys.path:
 load_dotenv(PROJECT_ROOT / ".env")
 
 from main import run_pipeline  # noqa: E402
+from equity_research.tools.pdf_memo import (  # noqa: E402
+    pdf_download_stem,
+    write_memo_pdf,
+)
 from equity_research.tools.report_pack import build_report_pack  # noqa: E402
 from equity_research.utils.llm_client import redact_secrets  # noqa: E402
 
@@ -171,6 +175,7 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "memo_html": _render_memo_html(memo_text),
         "memo_name": Path(memo_path).name if memo_path else None,
         "pdf_name": Path(pdf_path).name if pdf_path else None,
+        "pdf_download_name": pack.get("pdf_download_name"),
         "has_pdf": bool(pdf_path and Path(pdf_path).is_file()),
     }
     return payload
@@ -223,6 +228,40 @@ class _JobLogHandler(logging.Handler):
             job = JOBS.get(self.job_id)
             if job is not None:
                 job["logs"].append(line)
+
+
+def _refresh_memo_pdf(pdf_path: Path, as_stem: Optional[str] = None) -> str:
+    """Rebuild the research-note PDF and return the short download stem."""
+    ticker = pdf_path.name.split("_")[0]
+    markdown_path = pdf_path.with_name(pdf_path.name.replace("_memo.pdf", "_memo.md"))
+    sidecar_path = pdf_path.with_name(pdf_path.name.replace("_memo.pdf", "_gui.json"))
+    summary: Dict[str, Any] = {}
+    if sidecar_path.is_file():
+        try:
+            loaded = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                summary = loaded
+        except json.JSONDecodeError:
+            summary = {}
+    pack = summary.get("report_pack") or {}
+    stem = pdf_download_stem(as_stem or summary.get("pdf_download_name"), ticker)
+    if markdown_path.is_file():
+        markdown_text = markdown_path.read_text(encoding="utf-8")
+        identity = {
+            "ticker": ticker,
+            "company_name": pack.get("company_name") or summary.get("company_name"),
+            "exchange": pack.get("exchange"),
+            "industry": pack.get("industry") or summary.get("industry"),
+            "country": pack.get("country") or summary.get("country"),
+            "rating": pack.get("model_rating") or summary.get("model_rating"),
+            "price_target": pack.get("price_target_12m") or summary.get("price_target_12m"),
+            "share_price": pack.get("share_price") or summary.get("share_price"),
+            "upside": pack.get("upside_to_pt") or summary.get("upside_to_pt"),
+            "valuation_date": date.today(),
+        }
+        write_memo_pdf(markdown_text, pdf_path, identity=identity)
+        return stem
+    return stem
 
 
 def _run_job(
@@ -349,8 +388,9 @@ def api_report(name: str):
         summary["memo_markdown"] = text
         summary["memo_html"] = _render_memo_html(text)
         pdf = REPORTS_DIR / name.replace("_memo.md", "_memo.pdf")
-        summary["has_pdf"] = pdf.is_file()
-        summary["pdf_name"] = pdf.name if pdf.is_file() else None
+        summary["has_pdf"] = True
+        summary["pdf_name"] = pdf.name
+        summary["pdf_download_name"] = summary.get("pdf_download_name") or name.split("_")[0]
         summary["memo_name"] = name
     else:
         ticker = name.split("_")[0]
@@ -359,8 +399,9 @@ def api_report(name: str):
             "memo_markdown": text,
             "memo_html": _render_memo_html(text),
             "memo_name": name,
-            "has_pdf": (REPORTS_DIR / name.replace("_memo.md", "_memo.pdf")).is_file(),
+            "has_pdf": True,
             "pdf_name": name.replace("_memo.md", "_memo.pdf"),
+            "pdf_download_name": ticker,
             "partial": True,
         }
     return jsonify(summary)
@@ -371,6 +412,18 @@ def api_file(name: str):
     if "/" in name or "\\" in name:
         abort(400)
     path = REPORTS_DIR / name
+    if name.lower().endswith(".pdf"):
+        markdown_path = path.with_name(name.replace("_memo.pdf", "_memo.md"))
+        if not path.is_file() and not markdown_path.is_file():
+            abort(404)
+        stem = pdf_download_stem(request.args.get("as"), name.split("_")[0])
+        try:
+            stem = _refresh_memo_pdf(path, request.args.get("as"))
+        except Exception:
+            logger.exception("Could not restyle PDF %s; sending stored file.", name)
+        if not path.is_file():
+            abort(404)
+        return send_file(path, as_attachment=True, download_name=f"{stem}.pdf")
     if not path.is_file():
         abort(404)
     return send_file(path, as_attachment=True)

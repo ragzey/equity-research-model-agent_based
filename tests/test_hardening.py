@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import tempfile
 import unittest
+import zlib
 from datetime import datetime
 from pathlib import Path
 
@@ -27,7 +29,7 @@ from equity_research.tools.debt_analysis import (
     get_synthetic_spread,
     load_damodaran_spread_table,
 )
-from equity_research.tools.pdf_memo import write_memo_pdf
+from equity_research.tools.pdf_memo import pdf_download_stem, write_memo_pdf
 
 
 class CacheTtlTests(unittest.TestCase):
@@ -135,6 +137,10 @@ class DamodaranSnapshotTests(unittest.TestCase):
 
 
 class PdfMemoTests(unittest.TestCase):
+    def test_download_stem_uses_ticker(self):
+        self.assertEqual(pdf_download_stem(None, "TJX"), "TJX")
+        self.assertEqual(pdf_download_stem("TJX.pdf", "MSFT"), "TJX")
+
     def test_writes_a_nonempty_pdf(self):
         directory = Path(tempfile.mkdtemp())
         path = directory / "memo.pdf"
@@ -147,6 +153,40 @@ class PdfMemoTests(unittest.TestCase):
         write_memo_pdf(markdown, path)
         self.assertTrue(path.exists())
         self.assertGreater(path.stat().st_size, 0)
+
+    def test_pdf_starts_with_the_research_note(self):
+        directory = Path(tempfile.mkdtemp())
+        path = directory / "note.pdf"
+        markdown = (
+            "# THE TJX COMPANIES | TJX | Retail | United States\n\n"
+            "## Executive summary\n\nHold at fair value with a 12-month target.\n"
+        )
+        write_memo_pdf(
+            markdown,
+            path,
+            identity={
+                "ticker": "TJX",
+                "company_name": "The TJX Companies, Inc.",
+                "exchange": "NYQ",
+                "industry": "Apparel Retail",
+                "country": "United States",
+                "rating": "Hold",
+                "price_target": 151.84,
+                "share_price": 151.5,
+                "upside": 0.002,
+            },
+        )
+        payload = path.read_bytes()
+        extracted = []
+        for match in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", payload, re.S):
+            try:
+                extracted.append(zlib.decompress(match.group(1)).decode("latin-1", "replace"))
+            except zlib.error:
+                continue
+        text = "\n".join(extracted)
+        self.assertIn("Equity Research", text)
+        self.assertIn("Executive summary", text)
+        self.assertTrue(text.strip().startswith("THE TJX COMPANIES") or "THE TJX COMPANIES" in text[:400])
 
 
 if __name__ == "__main__":

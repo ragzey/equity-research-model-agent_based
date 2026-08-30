@@ -343,7 +343,10 @@ function renderSummary(summary) {
     downloads.push(`<a class="dl" href="/api/files/${encodeURIComponent(summary.memo_name)}">Markdown</a>`);
   }
   if (summary.has_pdf && summary.pdf_name) {
-    downloads.push(`<a class="dl" href="/api/files/${encodeURIComponent(summary.pdf_name)}">PDF</a>`);
+    const stem = summary.pdf_download_name || summary.ticker || "";
+    let href = `/api/files/${encodeURIComponent(summary.pdf_name)}`;
+    if (stem) href += `?as=${encodeURIComponent(stem)}`;
+    downloads.push(`<a class="dl" href="${href}">PDF</a>`);
   }
   $("#downloads").innerHTML = downloads.join("");
   $("#panel-memo").innerHTML = `<article class="memo">${summary.memo_html || "<p>No memo.</p>"}</article>`;

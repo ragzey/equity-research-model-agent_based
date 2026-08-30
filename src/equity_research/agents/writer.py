@@ -11,7 +11,7 @@ import json
 from ..graphs.desk import WRITER, format_transcript, inbox
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import WRITER_SYSTEM, WRITER_USER
-from ..tools.pdf_memo import write_memo_pdf
+from ..tools.pdf_memo import pdf_download_stem, write_memo_pdf
 from ..tools.report_pack import build_report_pack
 from ..tools.source_register import sources_markdown
 from ..utils.llm_client import LLMCallError, chat_json
@@ -423,6 +423,7 @@ def _write_gui_sidecar(
         "report_pack": pack,
         "memo_name": report_path.name,
         "pdf_name": report_path.name.replace("_memo.md", "_memo.pdf") if pdf_ok else None,
+        "pdf_download_name": pack.get("pdf_download_name"),
         "has_pdf": pdf_ok,
     }
     sidecar = report_path.with_name(report_path.name.replace("_memo.md", "_gui.json"))
@@ -609,8 +610,22 @@ Inputs actually used on this run. URLs appear only when the ledger stored them; 
     report_path = reports_dir / f"{ticker}_{stamp}_memo.md"
     report_path.write_text(memo, encoding="utf-8")
     pdf_path = reports_dir / f"{ticker}_{stamp}_memo.pdf"
+    pack["pdf_download_name"] = pdf_download_stem(None, ticker)
+    identity = {
+        "ticker": ticker,
+        "company_name": pack.get("company_name"),
+        "exchange": pack.get("exchange"),
+        "industry": pack.get("industry"),
+        "country": pack.get("country"),
+        "rating": pack.get("model_rating"),
+        "model_rating": pack.get("model_rating"),
+        "price_target": pack.get("price_target_12m"),
+        "share_price": pack.get("share_price"),
+        "upside": pack.get("upside_to_pt"),
+        "valuation_date": date.today(),
+    }
     try:
-        write_memo_pdf(memo, pdf_path)
+        write_memo_pdf(memo, pdf_path, identity=identity)
         pdf_value: Any = str(pdf_path)
     except Exception:
         logger.exception("PDF memo export failed; Markdown memo is still available.")
