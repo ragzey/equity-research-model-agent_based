@@ -91,6 +91,11 @@ input:focus {
   outline-offset: 1px;
 }
 
+#openai-key {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
+
 .field-note {
   margin: -4px 0 12px;
   font-size: 11px;
