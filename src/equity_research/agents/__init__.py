@@ -2,6 +2,7 @@
 
 from .aggregator import aggregator_node
 from .assumption_architect import assumption_architect_node
+from .assumption_auditor import assumption_auditor_node
 from .competitive import competitive_analyst_node
 from .company_products import company_products_node
 from .growth_path import growth_path_node
@@ -19,6 +20,7 @@ from .writer import lead_writer_node
 __all__ = [
     "aggregator_node",
     "assumption_architect_node",
+    "assumption_auditor_node",
     "competitive_analyst_node",
     "company_products_node",
     "growth_path_node",

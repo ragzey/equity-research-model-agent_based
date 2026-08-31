@@ -161,7 +161,7 @@ def allowed_growth_choices(
 
     Growth / scale-up names stay on the classifier base rate unless the
     industry packet shows a hostile cycle or below-history demand. Mature
-    names still have a low label.
+    names keep low only when demand is actually hostile or below history.
     """
     allowed = ["base"]
     growth = (packet or {}).get("category_growth") or {}

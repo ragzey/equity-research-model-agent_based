@@ -3,6 +3,7 @@
 from langgraph.graph import END, START, StateGraph
 
 from ..agents.aggregator import aggregator_node
+from ..agents.assumption_auditor import assumption_auditor_node
 from ..agents.assumption_architect import assumption_architect_node
 from ..agents.competitive import competitive_analyst_node
 from ..agents.company_products import company_products_node
@@ -39,10 +40,12 @@ def build_research_graph():
     Valuation-mix then picks a labeled DCF/relative weight from a Python menu
     using firm type, peer fit, and the industry packet. The LLM cannot type a
     percentage. On the FCFF path the assumption architect picks bounded
-    menu labels; the reviewer only accepts or rejects. Quant remains Python for
+    menu labels; the reviewer only accepts or rejects. An independent
+    assumption auditor then re-checks those labels against the ledger and
+    may only revert to classifier baseline. Quant remains Python for
     WACC, the operating P&L, and FCFF.     Sensitivity adds operational bear/base/bull
     from the same menus. The writer puts a Python thesis and Street table on
-    the memo. The auditor may correct narrative and clip invented
+    the memo. The memo auditor may correct narrative and clip invented
     tickers; it may not rewrite DCF or WACC.
     """
     workflow = StateGraph(EquityResearchState)
@@ -60,6 +63,7 @@ def build_research_graph():
         "valuation_assumption_reviewer",
         valuation_assumption_reviewer_node,
     )
+    workflow.add_node("assumption_auditor", assumption_auditor_node)
     workflow.add_node("quant_analyst", quant_analyst_node)
     workflow.add_node("post_quant_reviewer", post_quant_reviewer_node)
     workflow.add_node("sensitivity_analyst", sensitivity_analyst_node)
@@ -97,7 +101,8 @@ def build_research_graph():
         },
     )
     workflow.add_edge("assumption_architect", "valuation_assumption_reviewer")
-    workflow.add_edge("valuation_assumption_reviewer", "quant_analyst")
+    workflow.add_edge("valuation_assumption_reviewer", "assumption_auditor")
+    workflow.add_edge("assumption_auditor", "quant_analyst")
     workflow.add_edge("quant_analyst", "post_quant_reviewer")
     workflow.add_conditional_edges(
         "post_quant_reviewer",

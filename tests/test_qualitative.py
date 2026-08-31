@@ -123,6 +123,7 @@ class QualitativeTests(unittest.TestCase):
                 "competitive_analyst",
                 "qualitative_analyst",
                 "valuation_assumption_reviewer",
+                "assumption_auditor",
                 "quant_analyst",
             }.issubset(node_names)
         )

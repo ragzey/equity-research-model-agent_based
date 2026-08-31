@@ -68,6 +68,25 @@ class WriterTableTests(unittest.TestCase):
         self.assertIn("dcf_heavy", body)
         self.assertIn("90.00%", body)
 
+    def test_assumption_audit_table_renders_reverts(self):
+        body = writer._assumption_audit_table(
+            {
+                "applicable": True,
+                "reverted": ["high_growth_rate"],
+                "decisions": [
+                    {
+                        "key": "high_growth_rate",
+                        "action": "reject",
+                        "reason": "low is not on the allow-list",
+                    }
+                ],
+                "narrative": "Reverted low growth.",
+            }
+        )
+        self.assertIn("### Assumption audit", body)
+        self.assertIn("high_growth_rate", body)
+        self.assertIn("reject", body)
+
     def test_lead_writer_helper_calls_resolve_on_the_module(self):
         source = inspect.getsource(writer.lead_writer_node)
         tree = ast.parse(source)
@@ -81,6 +100,7 @@ class WriterTableTests(unittest.TestCase):
         self.assertIn("_pnl_forecast_table", names)
         self.assertIn("_growth_path_table", names)
         self.assertIn("_valuation_mix_table", names)
+        self.assertIn("_assumption_audit_table", names)
         missing = [
             name
             for name in sorted(names)

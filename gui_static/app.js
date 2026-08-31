@@ -697,6 +697,19 @@ function renderSummary(summary) {
   const mixMetricsLine = mixBits.length
     ? `<p class="hint">${escapeHtml(mixBits.join(" · "))}</p>`
     : "";
+  const assumptionAudit = summary.assumption_audit || {};
+  const auditAssumptionRows = (assumptionAudit.decisions || [])
+    .filter((row) => row && (row.key || row.action))
+    .map(
+      (row) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(String(row.key || "n/a"))} · ${escapeHtml(
+          String(row.action || "n/a")
+        )}</div>
+        <div>${escapeHtml(row.reason || assumptionAudit.narrative || "No excerpt.")}</div>
+      </div>`
+    )
+    .join("");
   const architect = summary.architect_choices || {};
   const architectRows = Object.keys(architect)
     .map(
@@ -722,6 +735,8 @@ function renderSummary(summary) {
     <h2>Valuation mix</h2>
     ${mixMetricsLine}
     ${mixRows || "<p class='hint'>No valuation-mix packet on this memo.</p>"}
+    <h2>Assumption audit</h2>
+    ${auditAssumptionRows || "<p class='hint'>No assumption audit on this memo.</p>"}
     <h2>Architect labels</h2>
     ${architectRows || "<p class='hint'>No architect choices on this memo.</p>"}
     <h2>Independent audit</h2>

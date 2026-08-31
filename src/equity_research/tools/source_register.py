@@ -285,11 +285,12 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
             "Narrative agents",
             (
                 "Competitive, Qualitative, industry/macro, company/products, operations, growth-path, valuation-mix, assumption architect, "
-                "assumption reviewer, writer, and independent auditor call OpenAI or "
+                "assumption reviewer, assumption auditor, writer, and memo auditor call OpenAI or "
                 "Gemini on ledger evidence. They may not invent tickers, URLs, or DCF "
                 "inputs. Market/industry/firm URLs appear only when Python fetched an "
-                "allowlisted page. The architect may only pick Python menu labels. The auditor "
-                "may correct narrative; it may not rewrite WACC or DCF."
+                "allowlisted page. The architect may only pick Python menu labels. The assumption "
+                "auditor may revert labels to baseline; the memo auditor may correct narrative "
+                "and may not rewrite WACC or DCF."
             ),
             "OpenAI or Gemini Chat Completions (narrative only)",
             "",

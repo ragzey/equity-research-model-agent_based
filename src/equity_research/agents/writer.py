@@ -469,6 +469,39 @@ def _valuation_mix_table(packet: Dict[str, Any]) -> str:
     return body
 
 
+def _assumption_audit_table(packet: Dict[str, Any]) -> str:
+    if not packet or not packet.get("applicable"):
+        return ""
+    rows = packet.get("decisions") or []
+    lines = [
+        "### Assumption audit",
+        "",
+        "| Assumption | Action | Reason |",
+        "|---|---|---|",
+    ]
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        lines.append(
+            "| {key} | {action} | {reason} |".format(
+                key=row.get("key") or "n/a",
+                action=row.get("action") or "n/a",
+                reason=" ".join(str(row.get("reason") or "").split()) or "n/a",
+            )
+        )
+    reverted = packet.get("reverted") or []
+    if reverted:
+        lines.append(
+            f"| Reverted | {', '.join(str(item) for item in reverted)} | "
+            "Python allow-list and independent auditor; Quant uses classifier baseline |"
+        )
+    narrative = str(packet.get("narrative") or "").strip()
+    body = "\n".join(lines) + "\n"
+    if narrative:
+        body += f"\n{narrative}\n"
+    return body
+
+
 def _pnl_forecast_table(rows: List[Dict[str, Any]]) -> str:
     if not rows:
         return "Operating P&L forecast unavailable."
@@ -1094,6 +1127,7 @@ The table is Yahoo consensus versus the accepted model. Gaps are the thesis; the
 {_operations_driver_table(state.get("operations_packet") or {})}
 {_growth_path_table(state.get("growth_path_packet") or {})}
 {_valuation_mix_table(state.get("valuation_mix_packet") or {})}
+{_assumption_audit_table(state.get("assumption_audit") or {})}
 ### Industry outlook
 
 {narratives["industry_outlook"]}
@@ -1116,7 +1150,7 @@ The primary value is a three-stage FCFF DCF built from that P&L. High-growth las
 
 ## Operating scenarios
 
-The published rating uses the reviewer-accepted base path. Bear / base / bull change only operating menu labels still on the evidence-gated allow-list. WACC and the peer EV/EBITDA cross-check stay on the base case.
+The published rating uses the reviewer- and assumption-auditor-accepted base path. Bear / base / bull change only operating menu labels still on the evidence-gated allow-list. WACC and the peer EV/EBITDA cross-check stay on the base case.
 
 {_scenario_table(pack.get("operating_scenarios") or {})}
 

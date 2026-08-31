@@ -176,6 +176,7 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "operations_packet": state.get("operations_packet"),
         "growth_path_packet": state.get("growth_path_packet"),
         "valuation_mix_packet": state.get("valuation_mix_packet"),
+        "assumption_audit": state.get("assumption_audit"),
         "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
         "memo_markdown": memo_text,

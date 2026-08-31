@@ -94,11 +94,12 @@ Aggregator
   → Growth-path → Valuation-mix
   → Router (financials stop here)
   → Architect (labels) → Reviewer (accept/reject)
+  → Assumption auditor (revert only)
   → Quant (Python WACC + P&L + FCFF)
   → Post-quant (arithmetic; bounded retry)
   → Sensitivity (WACC/g grid + operating bear/base/bull)
   → Writer (memo + GUI pack)
-  → Auditor (narrative only)
+  → Memo auditor (narrative only)
 ```
 
 | Node | Role |
@@ -112,11 +113,12 @@ Aggregator
 | Valuation-mix | Labeled DCF/relative weights from firm type, peer fit, industry |
 | Architect | Pick a label from a Python menu |
 | Reviewer | Accept or reject. Cannot type a new rate |
+| Assumption auditor | Independent second check of labels. May only revert to baseline |
 | Quant | CAPM, WACC, P&L, three-stage FCFF |
 | Post-quant | Missing/non-finite outputs, terminal spread, FCFF durability |
 | Sensitivity | 5×5 WACC/g plus operating scenarios |
 | Writer | Frozen facts + prose. Sources from the ledger |
-| Auditor | Per-agent check. Force-aligns PT, FV, last price, WACC, Street mean PT, rating |
+| Auditor | Per-agent memo check. Force-aligns PT, FV, last price, WACC, Street mean PT, rating. Does not re-decide growth labels |
 
 LLM providers: OpenAI or Gemini. Temperature is omitted for GPT-5.x. **WACC and DCF never go through the LLM.**
 

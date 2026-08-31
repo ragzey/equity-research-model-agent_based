@@ -360,6 +360,8 @@ class IndependentAuditorNodeTests(unittest.TestCase):
         self.assertIn(("growth_path", "valuation_mix"), edges)
         self.assertIn(("valuation_mix", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
+        self.assertIn(("valuation_assumption_reviewer", "assumption_auditor"), edges)
+        self.assertIn(("assumption_auditor", "quant_analyst"), edges)
 
 
 if __name__ == "__main__":

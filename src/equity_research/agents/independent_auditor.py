@@ -491,6 +491,13 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
             "replace fair value or the blend."
         ),
     }
+    assumption_auditor = {
+        "packet": state.get("assumption_audit") or {},
+        "instruction": (
+            "This agent already ran before Quant. Flag only. Do not propose a "
+            "replacement growth rate, mix, or DCF."
+        ),
+    }
     quant = {
         "valuation_method": pack.get("valuation_method") or state.get("valuation_method"),
         "is_math_verified": bool(state.get("is_math_verified")),
@@ -535,6 +542,7 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "operations_json": json.dumps(operations, default=str),
         "growth_path_json": json.dumps(growth_path, default=str),
         "valuation_mix_json": json.dumps(valuation_mix, default=str),
+        "assumption_auditor_json": json.dumps(assumption_auditor, default=str),
         "reviewer_json": json.dumps(reviewer, default=str),
         "quant_json": json.dumps(quant, default=str),
         "writer_json": json.dumps(writer, default=str),
@@ -936,6 +944,17 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
     agent_blocks["reviewer"] = {
         "action": reviewer.get("action") or "pass",
         "findings": reviewer_findings,
+    }
+
+    assumption_auditor_section = _section(payload, "assumption_auditor")
+    assumption_auditor_findings = _issues(
+        assumption_auditor_section, "assumption_auditor"
+    )
+    llm_findings.extend(assumption_auditor_findings)
+    agent_blocks["assumption_auditor"] = {
+        "action": assumption_auditor_section.get("action") or "pass",
+        "findings": assumption_auditor_findings,
+        "model_not_rewritten": True,
     }
 
     quant = _section(payload, "quant")

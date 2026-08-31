@@ -53,6 +53,7 @@ class EquityResearchState(TypedDict):
     valuation_mix_packet: Optional[Dict[str, Any]]  # Labeled DCF / relative mix from firm + industry
     event_calendar: Optional[List[Dict[str, Any]]]  # Yahoo earnings / dividend dates
     dcf_overrides: Optional[Dict[str, Any]]  # Architect candidates after reviewer veto
+    assumption_audit: Optional[Dict[str, Any]]  # Independent assumption auditor revert packet
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid
     operating_scenarios: Optional[Dict[str, Any]]  # Bear/base/bull from operating menus
     agent_messages: Annotated[List[Dict[str, Any]], operator.add]  # Desk handoffs (append-only)

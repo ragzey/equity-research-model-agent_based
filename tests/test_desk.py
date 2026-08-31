@@ -192,6 +192,7 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertIn("growth_path", graph.nodes)
         self.assertIn("valuation_mix", graph.nodes)
         self.assertIn("assumption_architect", graph.nodes)
+        self.assertIn("assumption_auditor", graph.nodes)
 
 
 if __name__ == "__main__":

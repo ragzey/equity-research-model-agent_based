@@ -52,6 +52,7 @@ def initial_state(
         valuation_mix_packet=None,
         event_calendar=None,
         dcf_overrides=None,
+        assumption_audit=None,
         valuation_sensitivity=None,
         operating_scenarios=None,
         agent_messages=[],
