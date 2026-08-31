@@ -33,6 +33,14 @@ EPS_LABELS = (
 )
 UNSUPPORTED_FCFF_SECTORS = {"financial services", "financials"}
 
+# Scale-up: last year's P&L is not the firm the market is pricing.
+SCALEUP_PS_THRESHOLD = 15.0
+SCALEUP_CAGR = 0.25
+MATURE_GROWTH_REFERENCE = 0.07
+MIN_HIGH_GROWTH_YEARS = 2
+MAX_HIGH_GROWTH_YEARS = 10
+MAX_HIGH_GROWTH_RATE = 0.50
+
 
 def is_financial_services_firm(info: Dict[str, Any]) -> bool:
     """Yahoo sector labels that are out of scope for this FCFF pipeline."""
@@ -208,8 +216,31 @@ def classify_firm_and_adjust_assumptions(
     is_large = cap >= 10_000_000_000
     is_small = cap < 2_000_000_000
     is_high_growth = revenue_cagr > 0.15
+    price_to_sales = cap / base_revenue if base_revenue else None
+    # P/S alone is not enough: ordinary high-growth large-caps stay on the
+    # 8–20% band. Scale-up needs hyper growth versus a mature run-rate, and
+    # dollar revenues (not toy units) so a $20bn cap on $122 of test revenue
+    # cannot reclassify the name.
+    is_scale_up = bool(
+        revenue_cagr >= SCALEUP_CAGR
+        and price_to_sales is not None
+        and price_to_sales >= SCALEUP_PS_THRESHOLD
+        and base_revenue >= 1_000_000
+    )
 
-    if is_large and is_high_growth:
+    if is_scale_up:
+        firm_type = "Scale-up High-Growth"
+        size_premium = 0.010
+        growth_low, growth_high = 0.20, MAX_HIGH_GROWTH_RATE
+        high_growth_rate = min(max(revenue_cagr, growth_low), growth_high)
+        sales_to_capital = 1.3
+        high_growth_years, transition_years = 8, 5
+        if current_margin <= 0:
+            terminal_margin = 0.15
+        else:
+            terminal_margin = max(0.15, min(current_margin, 0.22))
+        stable_sales_to_capital = 2.0
+    elif is_large and is_high_growth:
         firm_type = "High-Growth Large-Cap"
         size_premium = 0.005
         growth_low, growth_high = 0.08, 0.20
@@ -278,6 +309,7 @@ def classify_firm_and_adjust_assumptions(
         "transition_years": transition_years,
         "terminal_margin": terminal_margin,
         "stable_sales_to_capital": stable_sales_to_capital,
+        "price_to_sales": price_to_sales,
         "methodology_note": (
             "Rule-based policy assumptions; review against company guidance, "
             "consensus estimates, sector economics, and valuation date."

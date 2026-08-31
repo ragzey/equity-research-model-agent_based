@@ -13,6 +13,9 @@ from ..tools.debt_analysis import calculate_cost_of_debt, extract_ebit_and_inter
 from ..tools.firm_classifier import (
     classify_firm_and_adjust_assumptions,
     extract_operating_pnl_anchor,
+    MAX_HIGH_GROWTH_RATE,
+    MAX_HIGH_GROWTH_YEARS,
+    MIN_HIGH_GROWTH_YEARS,
 )
 from ..tools.assumption_menus import clip_terminal_growth
 from ..tools.operating_cycle import clip_sales_to_capital
@@ -186,8 +189,11 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     terminal_margin = float(
         overrides.get("terminal_margin", assumptions["terminal_margin"])
     )
-    if not 2 <= high_growth_years <= 7:
-        raise ValueError("Reviewed high-growth horizon must be between 2 and 7 years.")
+    if not MIN_HIGH_GROWTH_YEARS <= high_growth_years <= MAX_HIGH_GROWTH_YEARS:
+        raise ValueError(
+            f"Reviewed high-growth horizon must be between {MIN_HIGH_GROWTH_YEARS} "
+            f"and {MAX_HIGH_GROWTH_YEARS} years."
+        )
     if not -0.20 <= terminal_margin <= 0.35:
         raise ValueError("Reviewed terminal margin must be between -20% and 35%.")
     if not 0.03 <= market_erp <= 0.08:
@@ -200,8 +206,10 @@ def quant_analyst_node(state: EquityResearchState) -> Dict[str, Any]:
     bounds = assumptions.get("high_growth_rate_bounds") or [0.0, 0.40]
     band_low, band_high = float(bounds[0]), float(bounds[1])
     high_growth_rate = min(max(high_growth_rate, band_low), band_high)
-    if not 0.0 <= high_growth_rate <= 0.40:
-        raise ValueError("Reviewed high-growth rate must be between 0% and 40%.")
+    if not 0.0 <= high_growth_rate <= MAX_HIGH_GROWTH_RATE:
+        raise ValueError(
+            f"Reviewed high-growth rate must be between 0% and {MAX_HIGH_GROWTH_RATE:.0%}."
+        )
     ops_stc = ((state.get("operations_packet") or {}).get("metrics") or {}).get(
         "observed_sales_to_capital"
     )

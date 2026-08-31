@@ -11,7 +11,7 @@ from .cache import TTL_CONSENSUS, cache_get, cache_set
 
 logger = logging.getLogger("ConsensusGrowth")
 
-CONSENSUS_ABS_CAP = 0.40
+CONSENSUS_ABS_CAP = 0.80
 
 
 def _as_growth(value: Any) -> Optional[float]:

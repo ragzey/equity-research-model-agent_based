@@ -437,10 +437,13 @@ Rules:
 - Every non-base label needs a one-sentence reason that cites the packet or
   the Python operating-cycle ledger. Empty reasons are discarded.
 - If the industry/macro packet is insufficient, choose base or low, not high
-  or extend — unless the classifier already tagged a high-growth lifecycle and
-  high is in the allowed list for terminal growth.
-- Use high-band explicit growth only when category_growth is above_history
-  with evidence from the industry/markets packet, not from the products packet.
+  or extend — unless the classifier tagged Scale-up High-Growth or another
+  high-growth lifecycle and that label is on the allowed list.
+- Use high-band explicit growth when category_growth is above_history with
+  industry/markets evidence, or when the firm is Scale-up High-Growth (high
+  price/sales and hyper growth). Do not invent TAM; Python still clips the rate.
+- Use extend when it is allowed. Scale-up names may run eight to ten explicit
+  high-growth years.
 - Use the company/products packet for terminal margin and company-specific
   risk: mix, pricing, and firm catalysts. Do not treat a product launch as
   category growth.

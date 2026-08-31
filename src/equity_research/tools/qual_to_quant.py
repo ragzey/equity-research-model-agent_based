@@ -101,14 +101,24 @@ def analyze_competitive_moat(
     adjusted = min(
         max(default, midpoint),
         default + MAX_TERMINAL_MARGIN_UPLIFT,
-        target,
         MAX_TERMINAL_MARGIN,
     )
+    # Cap at current profitability only when the firm is already above the
+    # lifecycle floor. Loss-making or sub-floor names fade up to the classifier
+    # default; they must not drag terminal margin down to today's losses.
+    if target >= default:
+        adjusted = min(adjusted, target)
+    adjusted = max(adjusted, default)
     rationale = (
         f"Profitability advantage: target margin {target:.1%} vs peer median "
         f"{peer_median:.1%}. Terminal margin bounded at {adjusted:.1%}; "
         "this is a valuation policy adjustment, not standalone proof of a moat."
     )
+    if target < default:
+        rationale += (
+            f" Current margin is below the classifier floor {default:.1%}, "
+            "so terminal margin was not pulled down to today's profitability."
+        )
     logger.info(rationale)
     return round(adjusted, 4), rationale
 

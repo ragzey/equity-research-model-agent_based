@@ -100,8 +100,10 @@ class BondIdentifierTests(unittest.TestCase):
 
 class ConsensusBoundTests(unittest.TestCase):
     def test_rejects_extreme_growth_and_accepts_percent_form(self):
-        self.assertIsNone(_as_growth(0.50))
+        self.assertIsNone(_as_growth(0.90))
+        self.assertIsNone(_as_growth(0.85))
         self.assertIsNone(_as_growth(-0.60))
+        self.assertAlmostEqual(_as_growth(0.50), 0.50)
         self.assertAlmostEqual(_as_growth(12), 0.12)
         self.assertAlmostEqual(_as_growth(0.12), 0.12)
 
@@ -125,6 +127,13 @@ class ConsensusBoundTests(unittest.TestCase):
             {"growth": 0.16, "source": "yahoo_revenue_estimate_+1y"},
         )
         self.assertAlmostEqual(mid, 0.13)
+
+        scale_up, _ = blend_high_growth_rate(
+            0.50,
+            (0.20, 0.50),
+            {"growth": 0.50, "source": "yahoo_revenue_estimate_+1y"},
+        )
+        self.assertAlmostEqual(scale_up, 0.50)
 
         trailing, rationale = blend_high_growth_rate(
             0.02,

@@ -31,6 +31,20 @@ class QualToQuantTests(unittest.TestCase):
         self.assertAlmostEqual(margin, 0.18)
         self.assertIn("peer median", rationale)
 
+    def test_loss_making_advantage_cannot_pull_terminal_below_floor(self):
+        matrix = {
+            "target": "NBIS",
+            "competitors": ["PEER1", "PEER2"],
+            "metrics": {
+                "NBIS": {"operating_margin_pct": -0.22},
+                "PEER1": {"operating_margin_pct": -48.0},
+                "PEER2": {"operating_margin_pct": -20.0},
+            },
+        }
+        margin, rationale = analyze_competitive_moat(-0.0022, matrix, 0.12)
+        self.assertAlmostEqual(margin, 0.12)
+        self.assertIn("classifier floor", rationale)
+
     def test_company_risk_premium_is_direct_and_bounded(self):
         market_erp, company_premium, _ = assess_qualitative_risks(
             "Material litigation and a supply chain disruption.",
@@ -63,12 +77,12 @@ class QualToQuantTests(unittest.TestCase):
             {
                 "income_statement": {
                     datetime(2024, 12, 31): {
-                        "Total Revenue": 100.0,
-                        "Operating Income": 25.0,
+                        "Total Revenue": 8_000_000_000.0,
+                        "Operating Income": 2_000_000_000.0,
                     },
                     datetime(2025, 12, 31): {
-                        "Total Revenue": 120.0,
-                        "Operating Income": 36.0,
+                        "Total Revenue": 9_600_000_000.0,
+                        "Operating Income": 2_880_000_000.0,
                     },
                 },
                 "peer_comparison_matrix": PEER_MATRIX,

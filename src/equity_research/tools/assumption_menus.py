@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .consensus import blend_high_growth_rate
 from .firm_classifier import (
+    MAX_HIGH_GROWTH_YEARS,
     classify_firm_and_adjust_assumptions,
     extract_operating_baseline,
 )
@@ -40,6 +41,10 @@ _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
 def is_high_growth_lifecycle(firm_type: Optional[str]) -> bool:
     text = str(firm_type or "").strip().lower()
     return "high-growth" in text or text == "mid-cap growth"
+
+
+def is_scale_up_lifecycle(firm_type: Optional[str]) -> bool:
+    return "scale-up" in str(firm_type or "").strip().lower()
 
 
 def economy_terminal_cap(risk_free_rate: Optional[float]) -> float:
@@ -138,19 +143,31 @@ def _constructive_macro(packet: Optional[Dict[str, Any]]) -> bool:
     )
 
 
-def allowed_growth_choices(packet: Optional[Dict[str, Any]]) -> List[str]:
-    """High-band growth requires an evidenced above-history category view."""
+def allowed_growth_choices(
+    packet: Optional[Dict[str, Any]],
+    *,
+    firm_type: Optional[str] = None,
+) -> List[str]:
+    """High-band growth requires evidenced above-history, or a scale-up lifecycle."""
     allowed = ["low", "base"]
     growth = (packet or {}).get("category_growth") or {}
-    if _view(growth) == "above_history" and _has_evidence(growth):
+    if is_scale_up_lifecycle(firm_type) or (
+        _view(growth) == "above_history" and _has_evidence(growth)
+    ):
         allowed.append("high")
     return allowed
 
 
-def allowed_year_choices(packet: Optional[Dict[str, Any]]) -> List[str]:
-    """Extend the horizon only when demand evidence is constructive, not cyclical down."""
+def allowed_year_choices(
+    packet: Optional[Dict[str, Any]],
+    *,
+    firm_type: Optional[str] = None,
+) -> List[str]:
+    """Extend the horizon when demand is constructive or the firm is a scale-up."""
     allowed = ["compress", "base"]
-    if _constructive_macro(packet) and not _hostile_macro(packet):
+    if _hostile_macro(packet):
+        return allowed
+    if is_scale_up_lifecycle(firm_type) or _constructive_macro(packet):
         allowed.append("extend")
     return allowed
 
@@ -242,14 +259,10 @@ def _target_margin_and_cap(state: Dict[str, Any]) -> Tuple[float, float, Dict[st
 
     peer_matrix = state.get("peer_comparison_matrix")
     market_cap = None
-    comparable_target_margin = None
     if peer_matrix:
         target = peer_matrix.get("target")
         target_metrics = (peer_matrix.get("metrics") or {}).get(target, {})
         market_cap = target_metrics.get("market_cap")
-        margin_pct = target_metrics.get("operating_margin_pct")
-        if margin_pct is not None:
-            comparable_target_margin = float(margin_pct) / 100.0
 
     if market_cap is None:
         ticker = str(state.get("ticker") or "").strip().upper()
@@ -274,11 +287,10 @@ def _target_margin_and_cap(state: Dict[str, Any]) -> Tuple[float, float, Dict[st
         float(market_cap), income_statement, info
     )
     base_revenue, base_ebit = extract_operating_baseline(income_statement)
-    target_margin = (
-        comparable_target_margin
-        if comparable_target_margin is not None
-        else base_ebit / base_revenue
-    )
+    statement_margin = base_ebit / base_revenue
+    # Moat overlay must use the same EBIT/revenue as the DCF P&L, not Yahoo
+    # trailing operatingMargins, which can disagree with the annual statements.
+    target_margin = statement_margin
     return float(target_margin), float(market_cap), baseline
 
 
@@ -364,7 +376,7 @@ def build_choice_menus(
     years_base = int(baseline["high_growth_years"])
     years_compress = int(proposed.get("high_growth_years") or years_base)
     years_compress = min(years_compress, max(2, years_base - 2))
-    years_extend = min(7, years_base + 2)
+    years_extend = min(MAX_HIGH_GROWTH_YEARS, years_base + 2)
 
     firm_type = baseline.get("firm_type")
     policy_g = policy_terminal_growth(
@@ -420,10 +432,14 @@ def build_choice_menus(
         "sales_to_capital": [key for key in STC_CHOICES if key in stc_menu],
     }
     allowed["high_growth_rate"] = [
-        key for key in allowed["high_growth_rate"] if key in allowed_growth_choices(packet)
+        key
+        for key in allowed["high_growth_rate"]
+        if key in allowed_growth_choices(packet, firm_type=firm_type)
     ]
     allowed["high_growth_years"] = [
-        key for key in allowed["high_growth_years"] if key in allowed_year_choices(packet)
+        key
+        for key in allowed["high_growth_years"]
+        if key in allowed_year_choices(packet, firm_type=firm_type)
     ]
     allowed["terminal_growth_rate"] = allowed_terminal_growth_choices(
         packet,

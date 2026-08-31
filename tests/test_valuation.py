@@ -17,16 +17,16 @@ from equity_research.tools.valuation import (
 def sample_income_statement():
     return {
         datetime(2023, 12, 31): {
-            "Total Revenue": 100.0,
-            "Operating Income": 15.0,
+            "Total Revenue": 100_000_000.0,
+            "Operating Income": 15_000_000.0,
         },
         datetime(2024, 12, 31): {
-            "Total Revenue": 120.0,
-            "Operating Income": 20.0,
+            "Total Revenue": 120_000_000.0,
+            "Operating Income": 20_000_000.0,
         },
         datetime(2025, 12, 31): {
-            "Total Revenue": 144.0,
-            "Operating Income": 25.0,
+            "Total Revenue": 144_000_000.0,
+            "Operating Income": 25_000_000.0,
         },
     }
 
@@ -34,8 +34,8 @@ def sample_income_statement():
 class ClassifierTests(unittest.TestCase):
     def test_period_major_yahoo_shape(self):
         revenue, ebit = extract_operating_baseline(sample_income_statement())
-        self.assertEqual(revenue, 144.0)
-        self.assertEqual(ebit, 25.0)
+        self.assertEqual(revenue, 144_000_000.0)
+        self.assertEqual(ebit, 25_000_000.0)
         # Calendar-day annualization includes the 2024 leap day.
         self.assertAlmostEqual(
             calculate_revenue_cagr(sample_income_statement()), 0.2, places=3
@@ -50,6 +50,55 @@ class ClassifierTests(unittest.TestCase):
         self.assertEqual(result["firm_type"], "High-Growth Small-Cap")
         self.assertEqual(result["size_premium"], 0.02)
         self.assertTrue(result["fcff_supported"])
+
+    def test_scale_up_uses_longer_horizon_and_higher_growth_band(self):
+        income = {
+            datetime(2023, 12, 31): {
+                "Total Revenue": 50_000_000.0,
+                "Operating Income": 5_000_000.0,
+            },
+            datetime(2024, 12, 31): {
+                "Total Revenue": 200_000_000.0,
+                "Operating Income": 20_000_000.0,
+            },
+            datetime(2025, 12, 31): {
+                "Total Revenue": 530_000_000.0,
+                "Operating Income": 75_000_000.0,
+            },
+        }
+        result = classify_firm_and_adjust_assumptions(
+            55_000_000_000,
+            income,
+            {"sector": "Communication Services", "industry": "Internet Content"},
+        )
+        self.assertEqual(result["firm_type"], "Scale-up High-Growth")
+        self.assertEqual(result["high_growth_years"], 8)
+        self.assertEqual(result["transition_years"], 5)
+        self.assertAlmostEqual(result["high_growth_rate_bounds"][0], 0.20)
+        self.assertAlmostEqual(result["high_growth_rate_bounds"][1], 0.50)
+        self.assertAlmostEqual(result["high_growth_rate"], 0.50)
+        self.assertGreater(result["price_to_sales"], 15)
+        self.assertAlmostEqual(result["terminal_margin"], 0.15)
+
+    def test_high_ps_below_scaleup_cagr_stays_large_cap_high_growth(self):
+        income = {
+            datetime(2024, 12, 31): {
+                "Total Revenue": 666_666_667.0,
+                "Operating Income": 80_000_000.0,
+            },
+            datetime(2025, 12, 31): {
+                "Total Revenue": 800_000_000.0,
+                "Operating Income": 96_000_000.0,
+            },
+        }
+        result = classify_firm_and_adjust_assumptions(
+            20_000_000_000,
+            income,
+            {"sector": "Technology", "industry": "Software"},
+        )
+        self.assertEqual(result["firm_type"], "High-Growth Large-Cap")
+        self.assertGreater(result["price_to_sales"], 15)
+        self.assertAlmostEqual(result["high_growth_rate_bounds"][1], 0.20)
 
     def test_financial_services_firm_is_out_of_scope(self):
         result = classify_firm_and_adjust_assumptions(

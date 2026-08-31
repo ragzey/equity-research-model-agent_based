@@ -11,7 +11,11 @@ from ..agents.quant import fetch_ten_year_treasury_yield
 from ..graphs.desk import ARCHITECT, INDUSTRY_MACRO, REVIEWER, WRITER, make_message
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import INDUSTRY_MACRO_SYSTEM, INDUSTRY_MACRO_USER
-from ..tools.firm_classifier import calculate_revenue_cagr
+from ..tools.firm_classifier import (
+    MATURE_GROWTH_REFERENCE,
+    SCALEUP_CAGR,
+    calculate_revenue_cagr,
+)
 from ..tools.web_research import (
     format_web_research,
     ledger_source_urls,
@@ -443,6 +447,12 @@ def _block_open(block: Any, field: str) -> bool:
     return view == "insufficient" or not evidence
 
 
+def _view(block: Any) -> str:
+    if not isinstance(block, dict):
+        return "insufficient"
+    return str(block.get("view") or "insufficient").strip().lower()
+
+
 def _forward_consensus_growth(consensus: Optional[Dict[str, Any]]) -> Optional[float]:
     if not isinstance(consensus, dict):
         return None
@@ -466,6 +476,16 @@ def _category_from_ledger(
         return None
     forward = _forward_consensus_growth(consensus)
     if forward is None:
+        if historical_cagr >= SCALEUP_CAGR:
+            return {
+                "view": "above_history",
+                "evidence": (
+                    f"Historical revenue CAGR is {historical_cagr:.1%}, well above "
+                    f"a mature {MATURE_GROWTH_REFERENCE:.0%} run-rate, so category "
+                    "growth is treated as a scale-up path versus a mature firm."
+                ),
+                "source": "ledger",
+            }
         return {
             "view": "in_line",
             "evidence": (
@@ -607,9 +627,15 @@ def overlay_ledger_industry_views(
     above-history or a positive inflection after this overlay.
     """
     updated = dict(packet or {})
-    if _block_open(updated.get("category_growth"), "view"):
-        filled = _category_from_ledger(historical_cagr, consensus)
-        if filled:
+    filled = _category_from_ledger(historical_cagr, consensus)
+    if filled:
+        current = updated.get("category_growth") or {}
+        ledger_in_line = (
+            _view(current) == "in_line"
+            and str(current.get("source") or "") == "ledger"
+            and filled.get("view") == "above_history"
+        )
+        if _block_open(current, "view") or ledger_in_line:
             updated["category_growth"] = filled
     if _block_open(updated.get("pricing_power"), "view"):
         filled = _pricing_from_ledger(peer_snapshot)

@@ -18,6 +18,7 @@ from equity_research.graphs.defaults import initial_state
 from equity_research.graphs.graph import build_research_graph
 from equity_research.tools.assumption_menus import (
     allowed_growth_choices,
+    allowed_year_choices,
     apply_architect_choices,
     build_assumption_bundle,
     build_choice_menus,
@@ -86,12 +87,12 @@ def _high_growth_state():
     state = _tpr_state()
     state["income_statement"] = {
         datetime(2024, 12, 31): {
-            "Total Revenue": 100.0,
-            "Operating Income": 18.0,
+            "Total Revenue": 8_000_000_000.0,
+            "Operating Income": 1_440_000_000.0,
         },
         datetime(2025, 12, 31): {
-            "Total Revenue": 122.0,
-            "Operating Income": 22.0,
+            "Total Revenue": 9_760_000_000.0,
+            "Operating Income": 1_760_000_000.0,
         },
     }
     return state
@@ -134,6 +135,16 @@ class MenuPolicyTests(unittest.TestCase):
 
     def test_evidenced_above_history_unlocks_high_band(self):
         self.assertIn("high", allowed_growth_choices(_constructive_packet()))
+
+    def test_scale_up_lifecycle_unlocks_high_without_packet(self):
+        self.assertIn(
+            "high",
+            allowed_growth_choices({}, firm_type="Scale-up High-Growth"),
+        )
+        self.assertIn(
+            "extend",
+            allowed_year_choices({}, firm_type="Scale-up High-Growth"),
+        )
 
     def test_numeric_llm_growth_falls_back_to_base(self):
         self.assertEqual(resolve_labeled_choice(0.99, ["low", "base", "high"]), "base")
@@ -487,6 +498,25 @@ class PacketAndNodeTests(unittest.TestCase):
         )
         self.assertEqual(filled["category_growth"]["view"], "in_line")
         self.assertNotIn("high", allowed_growth_choices(filled))
+
+    def test_hyper_cagr_without_forward_is_scale_up_category(self):
+        empty = normalize_industry_macro_packet(
+            {},
+            risk_free_rate=0.04,
+            ledger_text="Historical revenue CAGR is 239.7%",
+            filing_text="Risk factors include competition.",
+        )
+        self.assertEqual(empty["category_growth"]["view"], "insufficient")
+        filled = overlay_ledger_industry_views(
+            empty,
+            historical_cagr=2.397,
+            consensus=None,
+            peer_snapshot=None,
+            risk_free_rate=0.04,
+        )
+        self.assertEqual(filled["category_growth"]["view"], "above_history")
+        self.assertEqual(filled["category_growth"]["source"], "ledger")
+        self.assertIn("high", allowed_growth_choices(filled))
 
     @patch("equity_research.agents.industry_macro.fetch_ten_year_treasury_yield", return_value=0.04)
     @patch("equity_research.agents.industry_macro.chat_json")
