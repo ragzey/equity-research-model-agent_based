@@ -12,13 +12,25 @@ from ..graphs.desk import ARCHITECT, INDUSTRY_MACRO, REVIEWER, WRITER, make_mess
 from ..graphs.state import EquityResearchState
 from ..prompts.desk import INDUSTRY_MACRO_SYSTEM, INDUSTRY_MACRO_USER
 from ..tools.firm_classifier import calculate_revenue_cagr
-from ..utils.grounding import contains_web_link
+from ..tools.web_research import (
+    format_web_research,
+    ledger_source_urls,
+    web_research_blob,
+)
+from ..utils.grounding import (
+    contains_web_link,
+    extract_urls,
+    has_blocked_link,
+    strip_urls,
+    url_on_ledger,
+)
 from ..utils.llm_client import LLMCallError, chat_json
 
 logger = logging.getLogger("IndustryMacroAnalyst")
 
 CATEGORY_VIEWS = {"above_history", "in_line", "below_history", "insufficient"}
 PRICING_VIEWS = {"strong", "neutral", "weak", "insufficient"}
+MIX_VIEWS = {"rising", "stable", "shifting", "insufficient"}
 CYCLE_VIEWS = {"upswing", "mid", "downswing", "secular", "insufficient"}
 MACRO_VIEWS = {"tailwind", "neutral", "headwind", "insufficient"}
 INFLECTION_VIEWS = {"positive", "negative", "none", "insufficient"}
@@ -69,10 +81,40 @@ def _clip_view(value: Any, allowed: set[str], default: str = "insufficient") -> 
 
 
 def _evidence(value: Any, limit: int = 400) -> str:
-    text = " ".join(str(value or "").split())
-    if contains_web_link(text):
-        return ""
+    text = strip_urls(" ".join(str(value or "").split()))
     return text[:limit]
+
+
+def _claimed_url(block: Any) -> str:
+    if not isinstance(block, dict):
+        return ""
+    claimed = str(block.get("source_url") or block.get("url") or "").strip()
+    if claimed:
+        return claimed
+    urls = extract_urls(str(block.get("evidence") or ""))
+    return urls[0] if urls else ""
+
+
+def _resolve_source_url(
+    evidence: str,
+    claimed: str,
+    catalog: Optional[List[Dict[str, Any]]] = None,
+) -> str:
+    rows = [row for row in (catalog or []) if isinstance(row, dict)]
+    urls = [str(row.get("url") or "") for row in rows if row.get("url")]
+    if claimed and url_on_ledger(claimed, urls):
+        for row in rows:
+            if url_on_ledger(claimed, [str(row.get("url") or "")]):
+                return str(row.get("url") or "")
+    if not evidence:
+        return ""
+    web_first = [row for row in rows if str(row.get("used_for") or "") != "filing"]
+    filing_rows = [row for row in rows if str(row.get("used_for") or "") == "filing"]
+    for row in web_first + filing_rows:
+        excerpt = str(row.get("excerpt") or "")
+        if _in_ledger(evidence, excerpt, min_len=24) and row.get("url"):
+            return str(row.get("url") or "")
+    return ""
 
 
 def _in_ledger(excerpt: str, ledger_text: str, *, min_len: int = 24) -> bool:
@@ -116,8 +158,12 @@ def _ground_narrative(
     value: Any,
     ledger_text: str,
     allowed_tickers: Optional[Iterable[str]] = None,
+    allowed_urls: Optional[Iterable[str]] = None,
 ) -> str:
-    text = _evidence(value, limit=1800)
+    raw = " ".join(str(value or "").split())
+    if has_blocked_link(raw, allowed_urls):
+        return ""
+    text = _evidence(raw, limit=1800)
     if not text:
         return ""
     if _novel_caps(text, allowed_tickers, ledger_text):
@@ -139,6 +185,7 @@ def _ground_block(
     view_key: str,
     allowed: set[str],
     ledger_text: str,
+    source_catalog: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, str]:
     view = _clip_view(block.get(view_key) or block.get("view"), allowed)
     evidence = _evidence(block.get("evidence"))
@@ -147,12 +194,21 @@ def _ground_block(
         evidence = ""
     elif view != "insufficient" and not evidence:
         view = "insufficient"
-    return {view_key: view, "evidence": evidence}
+    source_url = ""
+    if evidence:
+        source_url = _resolve_source_url(
+            evidence, _claimed_url(block), source_catalog
+        )
+    payload = {view_key: view, "evidence": evidence}
+    if source_url:
+        payload["source_url"] = source_url
+    return payload
 
 
 def _filing_blob(state: EquityResearchState) -> str:
     sections = state.get("sec_filing_sections") or {}
     parts = [
+        str(sections.get("item_1") or sections.get("Item 1") or ""),
         str(sections.get("item_1a") or sections.get("Item 1A") or ""),
         str(sections.get("item_7") or sections.get("Item 7") or ""),
     ]
@@ -181,6 +237,100 @@ def _peer_snapshot(state: EquityResearchState) -> Dict[str, Any]:
     }
 
 
+def _source_catalog(
+    state: Optional[EquityResearchState] = None,
+    *,
+    filing_text: str = "",
+    filing_url: str = "",
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    url = filing_url or str(((state or {}).get("sec_filing_metadata") or {}).get("filing_url") or "")
+    blob = filing_text
+    if blob or url:
+        rows.append(
+            {
+                "url": url,
+                "title": "SEC 10-K",
+                "publisher": "SEC EDGAR",
+                "excerpt": blob,
+                "tier": "first_party",
+                "used_for": "filing",
+            }
+        )
+    for doc in (state or {}).get("web_research") or []:
+        if isinstance(doc, dict) and (doc.get("url") or doc.get("excerpt")):
+            rows.append(doc)
+    return rows
+
+
+WATCH_LEVERS = {
+    "high_growth_rate",
+    "high_growth_years",
+    "terminal_growth_rate",
+    "terminal_margin",
+    "sales_to_capital",
+    "company_specific_risk_premium",
+    "shares_outstanding",
+    "price_target_12m",
+}
+
+
+def _ground_named_list(raw: Any, ledger_text: str, *, limit: int = 8) -> List[str]:
+    """Keep short market/product names that actually appear in the ledger."""
+    names: List[str] = []
+    items = raw if isinstance(raw, list) else []
+    for item in items:
+        if isinstance(item, dict):
+            text = _evidence(
+                item.get("name") or item.get("label") or item.get("market") or ""
+            )
+        else:
+            text = _evidence(item)
+        if len(text) < 4 or contains_web_link(text):
+            continue
+        if not _in_ledger(text, ledger_text, min_len=4):
+            continue
+        if text not in names:
+            names.append(text)
+        if len(names) >= limit:
+            break
+    return names
+
+
+def _ground_watch_items(
+    raw: Any,
+    ledger_text: str,
+    *,
+    limit: int = 8,
+    source_catalog: Optional[List[Dict[str, Any]]] = None,
+) -> List[Dict[str, str]]:
+    """Undated watch items. Dates are never taken from the LLM."""
+    rows: List[Dict[str, str]] = []
+    items = raw if isinstance(raw, list) else []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        evidence = _evidence(item.get("evidence"))
+        event = _evidence(item.get("event") or item.get("name"), limit=160)
+        if not evidence or not _in_ledger(evidence, ledger_text):
+            continue
+        lever = str(item.get("assumption") or item.get("lever") or "").strip()
+        if lever not in WATCH_LEVERS:
+            lever = ""
+        row = {
+            "event": event or evidence[:120],
+            "evidence": evidence,
+            "assumption": lever,
+        }
+        source_url = _resolve_source_url(evidence, _claimed_url(item), source_catalog)
+        if source_url:
+            row["source_url"] = source_url
+        rows.append(row)
+        if len(rows) >= limit:
+            break
+    return rows
+
+
 def normalize_industry_macro_packet(
     payload: Optional[Dict[str, Any]],
     *,
@@ -188,11 +338,13 @@ def normalize_industry_macro_packet(
     ledger_text: str = "",
     filing_text: str = "",
     allowed_tickers: Optional[Iterable[str]] = None,
+    source_catalog: Optional[List[Dict[str, Any]]] = None,
+    allowed_urls: Optional[Iterable[str]] = None,
 ) -> Dict[str, Any]:
-    """Keep categorical views; drop URLs, unsourced quotes, and any DCF fields.
+    """Keep categorical views; drop invented URLs, unsourced quotes, and DCF fields.
 
     High-band growth and demand-inflection views must be grounded in the 10-K
-    (or structured filing excerpts), not in qualitative prose or peer JSON.
+    or in Python-fetched allowlisted web excerpts — not qualitative prose or peer JSON.
     """
     raw = payload if isinstance(payload, dict) else {}
     category = raw.get("category_growth") if isinstance(raw.get("category_growth"), dict) else {}
@@ -204,6 +356,10 @@ def normalize_industry_macro_packet(
         if isinstance(raw.get("demand_inflection"), dict)
         else {}
     )
+    catalog = list(source_catalog or [])
+    urls = list(allowed_urls or [])
+    if not urls:
+        urls = [str(row.get("url") or "") for row in catalog if row.get("url")]
     growth_source = filing_text or ledger_text
     other_source = ledger_text or filing_text
     macro_evidence = _evidence(macro_raw.get("evidence"))
@@ -216,30 +372,60 @@ def normalize_industry_macro_packet(
             rates_view = "insufficient"
         if fx_view != "insufficient":
             fx_view = "insufficient"
+    macro_url = (
+        _resolve_source_url(macro_evidence, _claimed_url(macro_raw), catalog)
+        if macro_evidence
+        else ""
+    )
+    macro_block: Dict[str, Any] = {
+        "rates_view": rates_view,
+        "fx_demand_view": fx_view,
+        "risk_free_rate": risk_free_rate,
+        "evidence": macro_evidence,
+    }
+    if macro_url:
+        macro_block["source_url"] = macro_url
     return {
         "category_growth": _ground_block(
-            category, view_key="view", allowed=CATEGORY_VIEWS, ledger_text=growth_source
+            category,
+            view_key="view",
+            allowed=CATEGORY_VIEWS,
+            ledger_text=growth_source,
+            source_catalog=catalog,
         ),
         "pricing_power": _ground_block(
-            pricing, view_key="view", allowed=PRICING_VIEWS, ledger_text=other_source
+            pricing,
+            view_key="view",
+            allowed=PRICING_VIEWS,
+            ledger_text=other_source,
+            source_catalog=catalog,
         ),
         "cycle": _ground_block(
-            cycle, view_key="view", allowed=CYCLE_VIEWS, ledger_text=other_source
+            cycle,
+            view_key="view",
+            allowed=CYCLE_VIEWS,
+            ledger_text=other_source,
+            source_catalog=catalog,
         ),
-        "macro": {
-            "rates_view": rates_view,
-            "fx_demand_view": fx_view,
-            "risk_free_rate": risk_free_rate,
-            "evidence": macro_evidence,
-        },
+        "macro": macro_block,
         "demand_inflection": _ground_block(
             inflection,
             view_key="direction",
             allowed=INFLECTION_VIEWS,
             ledger_text=growth_source,
+            source_catalog=catalog,
+        ),
+        "markets": _ground_named_list(raw.get("markets"), growth_source or other_source),
+        "industry_catalysts": _ground_watch_items(
+            raw.get("industry_catalysts") or raw.get("catalysts"),
+            growth_source or other_source,
+            source_catalog=catalog,
         ),
         "narrative": _ground_narrative(
-            raw.get("narrative"), other_source, allowed_tickers
+            raw.get("narrative"),
+            other_source,
+            allowed_tickers,
+            allowed_urls=urls,
         ),
     }
 
@@ -506,12 +692,16 @@ def industry_macro_node(state: EquityResearchState) -> Dict[str, Any]:
         f"Historical revenue CAGR is {cagr:.1%}" if cagr is not None else ""
     )
     treasury_line = f"10-year Treasury yield is {risk_free_rate:.2%}"
+    web_blob = web_research_blob(state)
+    web_prompt = format_web_research(state.get("web_research") or [])
     # Qualitative prose is shown to the model but is not a grounding source.
     # Invented summary sentences must not unlock high-band growth.
+    # Allowlisted web excerpts may ground category growth and market names.
     ledger_text = "\n".join(
         [
             filing_text,
             excerpts,
+            web_blob,
             peer_json,
             json.dumps(consensus, default=str),
             cagr_line,
@@ -519,8 +709,12 @@ def industry_macro_node(state: EquityResearchState) -> Dict[str, Any]:
             ticker,
             sector,
             industry,
+            web_prompt,
         ]
     )
+    growth_text = "\n".join(part for part in (filing_text, excerpts, web_blob) if part)
+    catalog = _source_catalog(state, filing_text=growth_text)
+    allowed_urls = ledger_source_urls(state)
     allowed_tickers = {ticker}
     for symbol in (state.get("competitor_tickers") or []):
         if str(symbol).strip():
@@ -548,6 +742,7 @@ def industry_macro_node(state: EquityResearchState) -> Dict[str, Any]:
                     peer_json=peer_json[:8000],
                     qualitative=(state.get("qualitative_analysis_summary") or "")[:5000],
                     filing=filing_text[:8000],
+                    web_research=web_prompt[:12000],
                 ),
             },
         ],
@@ -560,8 +755,10 @@ def industry_macro_node(state: EquityResearchState) -> Dict[str, Any]:
         payload,
         risk_free_rate=risk_free_rate,
         ledger_text=ledger_text,
-        filing_text="\n".join(part for part in (filing_text, excerpts) if part),
+        filing_text=growth_text,
         allowed_tickers=allowed_tickers,
+        source_catalog=catalog,
+        allowed_urls=allowed_urls,
     )
     packet = overlay_ledger_industry_views(
         packet,
@@ -570,6 +767,15 @@ def industry_macro_node(state: EquityResearchState) -> Dict[str, Any]:
         peer_snapshot=snapshot,
         risk_free_rate=risk_free_rate,
     )
+    if not packet.get("markets"):
+        fallback = []
+        for label in (industry, sector):
+            text = " ".join(str(label or "").split())
+            if text and text.lower() not in {"n/a", "none"} and len(text) >= 4:
+                fallback.append(text)
+        if fallback:
+            packet["markets"] = fallback
+            packet["markets_source"] = "yahoo_sector_industry"
     narrative = packet.get("narrative") or "Industry and macro evidence was insufficient."
     body = (
         f"{ticker} industry/macro packet: category {packet['category_growth']['view']}, "

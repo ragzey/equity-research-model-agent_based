@@ -79,6 +79,11 @@ def _llm_decisions(
             indent=2,
             default=str,
         )[:6000],
+        company_products_json=json.dumps(
+            state.get("company_products_packet") or {},
+            indent=2,
+            default=str,
+        )[:6000],
         operations_json=json.dumps(
             state.get("operations_packet") or {},
             indent=2,

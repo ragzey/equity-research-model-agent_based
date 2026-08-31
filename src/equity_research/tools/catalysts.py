@@ -186,6 +186,7 @@ def extract_market_events(info: Optional[Dict[str, Any]]) -> List[Dict[str, Any]
                 "date_label": detail,
                 "sort_key": earnings.isoformat(),
                 "event": label,
+                "scope": "firm",
                 "source": "Yahoo Finance",
                 "assumption": "high_growth_rate, terminal_margin",
                 "model_impact": (
@@ -203,6 +204,7 @@ def extract_market_events(info: Optional[Dict[str, Any]]) -> List[Dict[str, Any]
                 "date_label": ex_div.isoformat(),
                 "sort_key": ex_div.isoformat(),
                 "event": "Ex-dividend / indicated dividend",
+                "scope": "firm",
                 "source": "Yahoo Finance",
                 "assumption": "price_target_12m",
                 "model_impact": (
@@ -231,6 +233,7 @@ def _filing_catalysts(
                 "date_label": filed.isoformat(),
                 "sort_key": filed.isoformat(),
                 "event": "Latest 10-K filed",
+                "scope": "firm",
                 "source": "SEC EDGAR",
                 "assumption": "sales_to_capital, operations",
                 "model_impact": (
@@ -284,6 +287,7 @@ def _filing_catalysts(
                     "date_label": raw,
                     "sort_key": parsed.isoformat(),
                     "event": f"{matched.title()} ({section})",
+                    "scope": "industry" if lever == "high_growth_rate" else "firm",
                     "source": "10-K excerpt on the ledger",
                     "assumption": lever,
                     "model_impact": impact,

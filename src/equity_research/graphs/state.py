@@ -18,6 +18,7 @@ class EquityResearchState(TypedDict):
     balance_sheet: Optional[Dict[str, Any]]
     cash_flow_statement: Optional[Dict[str, Any]]
     recent_news: Optional[List[Dict[str, str]]]
+    web_research: Optional[List[Dict[str, str]]]  # Allowlisted fetched pages + excerpts
     sec_filing_chunks: Optional[List[str]]  # Raw text extracted from 10-K
     sec_filing_metadata: Optional[Dict[str, str]]  # URL, date, accession
     outstanding_bonds: Optional[List[Dict[str, Any]]]  # {maturity_years, ytm/yield, isin?}
@@ -46,6 +47,7 @@ class EquityResearchState(TypedDict):
     peer_selection: Optional[Dict[str, Any]]  # Competitive analyst keep/drop rationale
     industry_outlook: Optional[str]  # Industry/macro demand narrative
     industry_macro_packet: Optional[Dict[str, Any]]  # Structured category/cycle/macro views
+    company_products_packet: Optional[Dict[str, Any]]  # Item 1 products, mix, firm catalysts
     operations_packet: Optional[Dict[str, Any]]  # CCC, NWC, reinvestment views + metrics
     event_calendar: Optional[List[Dict[str, Any]]]  # Yahoo earnings / dividend dates
     dcf_overrides: Optional[Dict[str, Any]]  # Architect candidates after reviewer veto

@@ -213,6 +213,30 @@ class ReportPackIntegrationTests(unittest.TestCase):
         self.assertEqual(sec["url"], "https://www.sec.gov/Archives/test.htm")
         self.assertTrue(any("Yahoo Finance" in row["source"] for row in pack["sources"]))
 
+    def test_pack_includes_fetched_web_research_hyperlink(self):
+        url = "https://www.reuters.com/technology/smartphones-outlook"
+        pack = build_report_pack(
+            self._state(
+                web_research=[
+                    {
+                        "url": url,
+                        "title": "Smartphone shipments outlook",
+                        "publisher": "Reuters",
+                        "tier": "high_quality",
+                        "used_for": "market",
+                        "excerpt": "Global smartphone shipments are expected to grow.",
+                    }
+                ]
+            )
+        )
+        market = next(row for row in pack["sources"] if row["item"] == "Market research")
+        self.assertEqual(market["url"], url)
+        self.assertIn("Reuters", market["source"])
+        from equity_research.tools.source_register import sources_markdown
+
+        markdown = sources_markdown(pack["sources"])
+        self.assertIn(f"]({url})", markdown)
+
     def test_no_peers_uses_full_dcf_weight(self):
         state = self._state()
         state["peer_comparison_matrix"] = {

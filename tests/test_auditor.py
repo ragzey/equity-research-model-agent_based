@@ -355,6 +355,7 @@ class IndependentAuditorNodeTests(unittest.TestCase):
         self.assertIn(("lead_writer", "independent_auditor"), edges)
         self.assertIn(("independent_auditor", "__end__"), edges)
         self.assertIn(("industry_macro", "valuation_router"), edges)
+        self.assertIn(("company_products", "valuation_router"), edges)
         self.assertIn(("operations", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 

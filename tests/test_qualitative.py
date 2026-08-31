@@ -32,6 +32,23 @@ class QualitativeTests(unittest.TestCase):
         self.assertIn("Supply chain disruption", item_1a)
         self.assertIn("Revenue and margin", item_7)
 
+    def test_extracts_item_1_business_without_swallowing_1a(self):
+        text = (
+            "ITEM 1. Business 3\nITEM 1A. Risk 5\n"
+            "ITEM 1. BUSINESS\n"
+            + ("We sell smartphones, wearables, and related services. " * 50)
+            + "\nITEM 1A. RISK FACTORS\n"
+            + ("Supply chain disruption could materially affect operations. " * 50)
+            + "\nITEM 1B. UNRESOLVED STAFF COMMENTS\n"
+        )
+        item_1 = extract_sec_section(text, "1")
+        item_1a = extract_sec_section(text, "1A")
+        self.assertIsNotNone(item_1)
+        self.assertIsNotNone(item_1a)
+        self.assertIn("smartphones", item_1)
+        self.assertNotIn("Supply chain disruption", item_1)
+        self.assertIn("Supply chain disruption", item_1a)
+
     def test_missing_evidence_never_invokes_historical_knowledge(self):
         summary = _deterministic_summary("TEST", "", "")
         self.assertIn("evidence unavailable", summary.lower())
@@ -86,9 +103,13 @@ class QualitativeTests(unittest.TestCase):
                 "accession_number": "0001",
             }
         )
-        self.assertEqual(payload["sec_filing_chunks"][0], "")
-        self.assertIn("Management discussion", payload["sec_filing_chunks"][1])
+        self.assertEqual(payload["sec_filing_sections"]["item_1"], "")
         self.assertEqual(payload["sec_filing_sections"]["item_1a"], "")
+        self.assertIn(
+            "Management discussion", payload["sec_filing_sections"]["item_7"]
+        )
+        self.assertEqual(payload["sec_filing_chunks"][0], "")
+        self.assertIn("Management discussion", payload["sec_filing_chunks"][2])
         self.assertEqual(
             payload["sec_filing_metadata"]["filing_url"],
             "https://www.sec.gov/Archives/example.htm",

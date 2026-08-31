@@ -165,6 +165,17 @@ def _assumption_table(pack: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _md_source(block: Any, *, url: str = "") -> str:
+    href = str(url or "").strip()
+    if not href and isinstance(block, dict):
+        href = str(block.get("source_url") or "").strip()
+    if href:
+        return f"[source]({href})"
+    if isinstance(block, dict) and str(block.get("source") or "") == "ledger":
+        return "Python ledger"
+    return "n/a"
+
+
 def _industry_driver_table(packet: Dict[str, Any]) -> str:
     if not packet:
         return ""
@@ -173,51 +184,123 @@ def _industry_driver_table(packet: Dict[str, Any]) -> str:
             "Category growth",
             (packet.get("category_growth") or {}).get("view"),
             (packet.get("category_growth") or {}).get("evidence"),
+            _md_source(packet.get("category_growth")),
         ),
         (
             "Pricing power",
             (packet.get("pricing_power") or {}).get("view"),
             (packet.get("pricing_power") or {}).get("evidence"),
+            _md_source(packet.get("pricing_power")),
         ),
         (
             "Cycle",
             (packet.get("cycle") or {}).get("view"),
             (packet.get("cycle") or {}).get("evidence"),
+            _md_source(packet.get("cycle")),
         ),
         (
             "Demand inflection",
             (packet.get("demand_inflection") or {}).get("direction"),
             (packet.get("demand_inflection") or {}).get("evidence"),
+            _md_source(packet.get("demand_inflection")),
         ),
         (
             "Rates",
             (packet.get("macro") or {}).get("rates_view"),
             (packet.get("macro") or {}).get("evidence"),
+            _md_source(packet.get("macro")),
         ),
         (
             "FX / demand",
             (packet.get("macro") or {}).get("fx_demand_view"),
             "",
+            _md_source(packet.get("macro")),
         ),
     ]
     lines = [
         "### Industry and macro drivers",
         "",
-        "| Driver | View | Ledger evidence |",
-        "|---|---|---|",
+        "| Driver | View | Ledger evidence | Source |",
+        "|---|---|---|---|",
     ]
-    for label, view, evidence in rows:
+    for label, view, evidence, source in rows:
         shown = view or "insufficient"
         if str(shown).strip().lower() == "insufficient":
             shown = "insufficient 10-K or ledger evidence"
         lines.append(
             f"| {label} | {shown} | "
-            f"{' '.join(str(evidence or '').split()) or 'n/a'} |"
+            f"{' '.join(str(evidence or '').split()) or 'n/a'} | {source} |"
         )
     rf = (packet.get("macro") or {}).get("risk_free_rate")
     if rf is not None:
-        lines.append(f"| 10-year Treasury | {_fmt_percent(rf)} | Python live yield |")
+        lines.append(f"| 10-year Treasury | {_fmt_percent(rf)} | Python live yield | Yahoo ^TNX |")
+    markets = packet.get("markets") or []
+    if markets:
+        market_source = (
+            "Yahoo sector-industry"
+            if packet.get("markets_source") == "yahoo_sector_industry"
+            else "Item 1 / 7 or fetched market research"
+        )
+        lines.append(
+            "| Markets | "
+            + "; ".join(str(item) for item in markets)
+            + f" | copied names | {market_source} |"
+        )
     return "\n".join(lines) + "\n"
+
+
+def _watch_table(title: str, rows: Any) -> str:
+    items = [row for row in (rows or []) if isinstance(row, dict)]
+    if not items:
+        return ""
+    lines = [
+        f"### {title}",
+        "",
+        "| Watch item | Assumption | Ledger evidence | Source |",
+        "|---|---|---|---|",
+    ]
+    for row in items:
+        lines.append(
+            "| {event} | {assumption} | {evidence} | {source} |".format(
+                event=row.get("event") or "",
+                assumption=row.get("assumption") or "n/a",
+                evidence=" ".join(str(row.get("evidence") or "").split()) or "n/a",
+                source=_md_source(row),
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _company_products_table(packet: Dict[str, Any]) -> str:
+    if not packet:
+        return ""
+    products = packet.get("products") or []
+    lines = [
+        "### Company products",
+        "",
+        "| Driver | View | Ledger evidence | Source |",
+        "|---|---|---|---|",
+    ]
+    if products:
+        lines.append(
+            "| Products / segments | "
+            + "; ".join(str(item) for item in products)
+            + " | names copied from Item 1 or fetched pages | Item 1 / allowlisted IR |"
+        )
+    mix = packet.get("mix") or {}
+    pricing = packet.get("pricing_power") or {}
+    for label, block, field in (
+        ("Mix", mix, "view"),
+        ("Pricing power", pricing, "view"),
+    ):
+        view = block.get(field) or "insufficient"
+        evidence = " ".join(str(block.get("evidence") or "").split()) or "n/a"
+        lines.append(f"| {label} | {view} | {evidence} | {_md_source(block)} |")
+    narrative = str(packet.get("narrative") or "").strip()
+    body = "\n".join(lines) + "\n"
+    if narrative:
+        body += f"\n{narrative}\n"
+    return body + _watch_table("Firm-specific watch items", packet.get("firm_catalysts"))
 
 
 def _operations_driver_table(packet: Dict[str, Any]) -> str:
@@ -348,13 +431,14 @@ def _catalyst_table(rows: List[Dict[str, Any]]) -> str:
             "10-K excerpts). Item 1A risks below are not a timing forecast."
         )
     lines = [
-        "| Date | Event | Assumption hit | What it does to the model | Source |",
-        "|---|---|---|---|---|",
+        "| Date | Scope | Event | Assumption hit | What it does to the model | Source |",
+        "|---|---|---|---|---|---|",
     ]
     for row in rows:
         lines.append(
-            "| {date} | {event} | {assumption} | {impact} | {source} |".format(
+            "| {date} | {scope} | {event} | {assumption} | {impact} | {source} |".format(
                 date=row.get("date_label") or row.get("date") or "n/a",
+                scope=row.get("scope") or "n/a",
                 event=row.get("event") or "",
                 assumption=row.get("assumption") or "",
                 impact=" ".join(str(row.get("model_impact") or "").split()),
@@ -627,6 +711,11 @@ def _synthesize_narratives(
                         indent=2,
                         default=str,
                     )[:4000],
+                    company_products_json=json.dumps(
+                        state.get("company_products_packet") or {},
+                        indent=2,
+                        default=str,
+                    )[:4000],
                     operations_json=json.dumps(
                         state.get("operations_packet") or {},
                         indent=2,
@@ -728,6 +817,7 @@ def _write_gui_sidecar(
         "handoffs": handoffs,
         "peer_selection": state.get("peer_selection"),
         "industry_macro_packet": state.get("industry_macro_packet"),
+        "company_products_packet": state.get("company_products_packet"),
         "operations_packet": state.get("operations_packet"),
         "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
@@ -872,6 +962,8 @@ The table is Yahoo consensus versus the accepted model. Gaps are the thesis; the
 {narratives["qualitative_narrative"]}
 
 {_industry_driver_table(state.get("industry_macro_packet") or {})}
+{_watch_table("Industry watch items", (state.get("industry_macro_packet") or {}).get("industry_catalysts"))}
+{_company_products_table(state.get("company_products_packet") or {})}
 {_operations_driver_table(state.get("operations_packet") or {})}
 ### Industry outlook
 

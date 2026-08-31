@@ -370,6 +370,66 @@ class PacketAndNodeTests(unittest.TestCase):
         self.assertEqual(packet["category_growth"]["view"], "above_history")
         self.assertIn("high", allowed_growth_choices(packet))
 
+    def test_allowlisted_web_excerpt_unlocks_above_history_with_hyperlink(self):
+        quote = (
+            "Global smartphone shipments are expected to grow faster than the "
+            "company's recent revenue history this year."
+        )
+        url = "https://www.reuters.com/technology/smartphones-outlook"
+        packet = normalize_industry_macro_packet(
+            {
+                "category_growth": {
+                    "view": "above_history",
+                    "evidence": quote,
+                    "source_url": url,
+                }
+            },
+            risk_free_rate=0.04,
+            ledger_text=quote,
+            filing_text=quote,
+            source_catalog=[
+                {
+                    "url": url,
+                    "title": "Smartphone outlook",
+                    "publisher": "reuters.com",
+                    "excerpt": quote,
+                    "tier": "high_quality",
+                    "used_for": "market",
+                }
+            ],
+        )
+        self.assertEqual(packet["category_growth"]["view"], "above_history")
+        self.assertEqual(packet["category_growth"]["source_url"], url)
+        self.assertIn("high", allowed_growth_choices(packet))
+
+    def test_invented_source_url_is_replaced_by_matching_fetched_page(self):
+        quote = (
+            "Global smartphone shipments are expected to grow faster than the "
+            "company's recent revenue history this year."
+        )
+        real = "https://www.reuters.com/technology/smartphones-outlook"
+        packet = normalize_industry_macro_packet(
+            {
+                "category_growth": {
+                    "view": "above_history",
+                    "evidence": quote,
+                    "source_url": "https://evil.test/gartner-tam",
+                }
+            },
+            risk_free_rate=0.04,
+            ledger_text=quote,
+            filing_text=quote,
+            source_catalog=[
+                {
+                    "url": real,
+                    "excerpt": quote,
+                    "used_for": "market",
+                }
+            ],
+        )
+        self.assertEqual(packet["category_growth"]["source_url"], real)
+        self.assertNotIn("evil.test", packet["category_growth"]["source_url"])
+
     def test_ledger_overlay_fills_apple_style_insufficient_packet(self):
         empty = normalize_industry_macro_packet(
             {},
@@ -531,8 +591,10 @@ class PacketAndNodeTests(unittest.TestCase):
         edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
         self.assertIn("industry_macro", graph.nodes)
         self.assertIn("operations", graph.nodes)
+        self.assertIn("company_products", graph.nodes)
         self.assertIn("assumption_architect", graph.nodes)
         self.assertIn(("industry_macro", "valuation_router"), edges)
+        self.assertIn(("company_products", "valuation_router"), edges)
         self.assertIn(("operations", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 

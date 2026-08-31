@@ -13,6 +13,7 @@ from ..tools.firm_classifier import is_financial_services_firm
 from ..tools.market_api import fetch_financial_statements
 from ..tools.peer_discovery import discover_peer_candidates, hydrate_peer_metadata
 from ..tools.price_history import fetch_rebased_price_history
+from ..tools.web_research import fetch_web_research
 from ..tools.sec_api import (
     fetch_latest_10k_sections,
     resolve_listed_symbol,
@@ -172,5 +173,34 @@ def aggregator_node(state: EquityResearchState) -> Dict[str, Any]:
     except Exception:
         logger.exception("Indexed price history unavailable for %s", ticker)
         updates["price_history"] = None
+
+    # 5. Allowlisted market / industry / firm pages (not model memory)
+    try:
+        docs = fetch_web_research(
+            ticker,
+            company_name=str(info.get("shortName") or info.get("longName") or ""),
+            sector=str(info.get("sector") or ""),
+            industry=str(info.get("industry") or ""),
+            website=str(info.get("website") or ""),
+        )
+        updates["web_research"] = docs or None
+        updates["recent_news"] = (
+            [
+                {
+                    "title": str(item.get("title") or ""),
+                    "url": str(item.get("url") or ""),
+                    "publisher": str(item.get("publisher") or ""),
+                }
+                for item in docs
+                if isinstance(item, dict)
+            ]
+            or None
+        )
+        if docs:
+            logger.info("Saved %d allowlisted web research page(s) to the ledger.", len(docs))
+    except Exception:
+        logger.exception("Allowlisted web research unavailable for %s", ticker)
+        updates["web_research"] = None
+        updates["recent_news"] = None
 
     return updates

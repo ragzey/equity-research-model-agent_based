@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from equity_research.utils.grounding import contains_web_link
+from equity_research.utils.grounding import contains_web_link, has_blocked_link
 
 
 class GroundingTests(unittest.TestCase):
@@ -19,3 +19,13 @@ class GroundingTests(unittest.TestCase):
         self.assertFalse(contains_web_link("Worldwide demand remains in line."))
         self.assertFalse(contains_web_link(""))
         self.assertFalse(contains_web_link(None))
+
+    def test_blocked_unless_on_ledger(self):
+        allowed = ["https://www.sec.gov/Archives/edgar/data/1/a.htm"]
+        self.assertTrue(has_blocked_link("https://evil.test", allowed))
+        self.assertFalse(
+            has_blocked_link(
+                "Filed at https://www.sec.gov/Archives/edgar/data/1/a.htm",
+                allowed,
+            )
+        )

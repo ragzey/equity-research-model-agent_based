@@ -444,6 +444,7 @@ class GraphWiringTests(unittest.TestCase):
         self.assertIn("operations", graph.nodes)
         self.assertIn(("operations", "valuation_router"), edges)
         self.assertIn(("industry_macro", "valuation_router"), edges)
+        self.assertIn(("company_products", "valuation_router"), edges)
 
 
 if __name__ == "__main__":

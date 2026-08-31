@@ -44,11 +44,17 @@ ISSUER_ALIASES = {
 }
 
 SECTION_BOUNDARIES = {
+    "1": (("ITEM 1.", "ITEM 1 BUSINESS"), ("ITEM 1A.", "ITEM 1A")),
     "1A": (("ITEM 1A.", "ITEM 1A"), ("ITEM 1B.", "ITEM 1B")),
     "7": (("ITEM 7.", "ITEM 7"), ("ITEM 7A.", "ITEM 7A")),
     "8": (("ITEM 8.", "ITEM 8"), ("ITEM 9.", "ITEM 9", "ITEM 9A")),
 }
-SECTION_MAX_CHARS = {"1A": MAX_SECTION_CHARS, "7": MAX_SECTION_CHARS, "8": 1_500_000}
+SECTION_MAX_CHARS = {
+    "1": MAX_SECTION_CHARS,
+    "1A": MAX_SECTION_CHARS,
+    "7": MAX_SECTION_CHARS,
+    "8": 1_500_000,
+}
 
 
 def get_headers() -> Dict[str, str]:
@@ -224,10 +230,10 @@ def _find_real_section(
 
 
 def extract_sec_section(clean_text: str, section_id: str) -> Optional[str]:
-    """Extract Item 1A, Item 7, or Item 8 from already-cleaned 10-K text."""
+    """Extract Item 1, 1A, 7, or 8 from already-cleaned 10-K text."""
     normalized = section_id.strip().upper()
     if normalized not in SECTION_BOUNDARIES:
-        raise ValueError("section_id must be '1A', '7', or '8'.")
+        raise ValueError("section_id must be '1', '1A', '7', or '8'.")
     starts, ends = SECTION_BOUNDARIES[normalized]
     return _find_real_section(
         clean_text,
@@ -287,11 +293,12 @@ def fetch_latest_10k_sections(
     ticker: str,
     include_extended_financials: bool = False,
 ) -> Optional[Dict[str, Any]]:
-    """Download one filing and return sourced Item 1A, Item 7, and Item 8 excerpts."""
+    """Download one filing and return sourced Item 1, 1A, 7, and 8 excerpts."""
     filing = _download_latest_10k(ticker)
     if not filing:
         return None
     clean_text = filing.pop("clean_text")
+    item_1 = extract_sec_section(clean_text, "1")
     item_1a = extract_sec_section(clean_text, "1A")
     if include_extended_financials:
         starts, ends = SECTION_BOUNDARIES["7"]
@@ -305,17 +312,25 @@ def fetch_latest_10k_sections(
         item_7 = extract_sec_section(clean_text, "7")
     item_8 = extract_sec_section(clean_text, "8")
     logger.info(
-        "Extracted 10-K sections for %s | Item 1A: %d | Item 7: %d | Item 8: %d chars",
+        "Extracted 10-K sections for %s | Item 1: %d | Item 1A: %d | Item 7: %d | Item 8: %d chars",
         ticker,
+        len(item_1 or ""),
         len(item_1a or ""),
         len(item_7 or ""),
         len(item_8 or ""),
     )
-    return {**filing, "item_1a": item_1a, "item_7": item_7, "item_8": item_8}
+    return {
+        **filing,
+        "item_1": item_1,
+        "item_1a": item_1a,
+        "item_7": item_7,
+        "item_8": item_8,
+    }
 
 
 def sourced_filing_payload(sections: Dict[str, Any]) -> Dict[str, Any]:
-    """Labeled Item 1A / Item 7 plus filing URL metadata. Never drop a missing section."""
+    """Labeled Item 1 / 1A / 7 plus filing URL metadata. Never drop a missing section."""
+    item_1 = str(sections.get("item_1") or "")[:MAX_SECTION_CHARS]
     item_1a = str(sections.get("item_1a") or "")[:MAX_SECTION_CHARS]
     item_7 = str(sections.get("item_7") or "")[:MAX_SECTION_CHARS]
     metadata = {
@@ -324,9 +339,13 @@ def sourced_filing_payload(sections: Dict[str, Any]) -> Dict[str, Any]:
         if sections.get(key)
     }
     payload: Dict[str, Any] = {}
-    if item_1a or item_7:
-        payload["sec_filing_sections"] = {"item_1a": item_1a, "item_7": item_7}
-        payload["sec_filing_chunks"] = [item_1a, item_7]
+    if item_1 or item_1a or item_7:
+        payload["sec_filing_sections"] = {
+            "item_1": item_1,
+            "item_1a": item_1a,
+            "item_7": item_7,
+        }
+        payload["sec_filing_chunks"] = [item_1, item_1a, item_7]
     if metadata:
         payload["sec_filing_metadata"] = metadata
     return payload
@@ -339,8 +358,8 @@ def fetch_sec_section(ticker: str, section_id: str) -> Optional[str]:
         return None
     normalized = section_id.strip().upper()
     if normalized not in SECTION_BOUNDARIES:
-        raise ValueError("section_id must be '1A', '7', or '8'.")
-    key = {"1A": "item_1a", "7": "item_7", "8": "item_8"}[normalized]
+        raise ValueError("section_id must be '1', '1A', '7', or '8'.")
+    key = {"1": "item_1", "1A": "item_1a", "7": "item_7", "8": "item_8"}[normalized]
     return sections.get(key)
 
 

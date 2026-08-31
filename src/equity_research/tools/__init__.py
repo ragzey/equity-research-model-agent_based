@@ -41,6 +41,7 @@ from .peer_discovery import (
 from .price_history import fetch_rebased_price_history
 from .report_pack import build_report_pack
 from .source_register import build_source_register
+from .web_research import fetch_web_research
 from .valuation import (
     build_dcf_sensitivity_grid,
     calculate_wacc,
@@ -74,6 +75,7 @@ __all__ = [
     "sourced_filing_payload",
     "build_report_pack",
     "build_source_register",
+    "fetch_web_research",
     "build_assumption_bundle",
     "apply_architect_choices",
     "clip_sales_to_capital",

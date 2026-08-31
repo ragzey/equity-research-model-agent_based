@@ -237,7 +237,7 @@ function renderSources(pack) {
       </thead>
       <tbody>${body}</tbody>
     </table>
-    <p class="chart-note">Ledger citations only. The desk does not invent URLs or references.</p>
+    <p class="chart-note">Ledger citations only. Hyperlinks are pages Python fetched or the SEC filing URL. The desk does not invent URLs.</p>
   `;
 }
 
@@ -552,23 +552,49 @@ function renderSummary(summary) {
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join("");
   const packet = summary.industry_macro_packet || {};
+  const sourceAnchor = (url) => {
+    const href = String(url || "").trim();
+    if (!href) return "";
+    return ` <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">source</a>`;
+  };
   const driverRows = [
-    ["Category growth", (packet.category_growth || {}).view, (packet.category_growth || {}).evidence],
-    ["Pricing power", (packet.pricing_power || {}).view, (packet.pricing_power || {}).evidence],
-    ["Cycle", (packet.cycle || {}).view, (packet.cycle || {}).evidence],
-    ["Demand inflection", (packet.demand_inflection || {}).direction, (packet.demand_inflection || {}).evidence],
-    ["Rates", (packet.macro || {}).rates_view, (packet.macro || {}).evidence],
+    ["Category growth", (packet.category_growth || {}).view, (packet.category_growth || {}).evidence, (packet.category_growth || {}).source_url],
+    ["Pricing power", (packet.pricing_power || {}).view, (packet.pricing_power || {}).evidence, (packet.pricing_power || {}).source_url],
+    ["Cycle", (packet.cycle || {}).view, (packet.cycle || {}).evidence, (packet.cycle || {}).source_url],
+    ["Demand inflection", (packet.demand_inflection || {}).direction, (packet.demand_inflection || {}).evidence, (packet.demand_inflection || {}).source_url],
+    ["Rates", (packet.macro || {}).rates_view, (packet.macro || {}).evidence, (packet.macro || {}).source_url],
   ]
     .filter((row) => row[1] || row[2])
     .map(
-      ([label, view, evidence]) => `
+      ([label, view, evidence, url]) => `
       <div class="decision">
         <div class="who">${escapeHtml(label)} · ${escapeHtml(
           view && view !== "insufficient"
             ? view
             : "insufficient 10-K or ledger evidence"
         )}</div>
-        <div>${escapeHtml(evidence || "No excerpt.")}</div>
+        <div>${escapeHtml(evidence || "No excerpt.")}${sourceAnchor(url)}</div>
+      </div>`
+    )
+    .join("");
+  const markets = (packet.markets || []).filter(Boolean).join("; ");
+  const productsPacket = summary.company_products_packet || {};
+  const productNames = (productsPacket.products || []).filter(Boolean).join("; ");
+  const productRows = [
+    ["Products / segments", productNames, "Item 1 names copied from the filing or fetched pages", ""],
+    ["Mix", (productsPacket.mix || {}).view, (productsPacket.mix || {}).evidence, (productsPacket.mix || {}).source_url],
+    ["Pricing power", (productsPacket.pricing_power || {}).view, (productsPacket.pricing_power || {}).evidence, (productsPacket.pricing_power || {}).source_url],
+  ]
+    .filter((row) => row[1] || row[2])
+    .map(
+      ([label, view, evidence, url]) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(
+          view && view !== "insufficient"
+            ? view
+            : "insufficient 10-K or ledger evidence"
+        )}</div>
+        <div>${escapeHtml(evidence || "No excerpt.")}${sourceAnchor(url)}</div>
       </div>`
     )
     .join("");
@@ -614,7 +640,10 @@ function renderSummary(summary) {
     .join("");
   $("#panel-desk").innerHTML = `
     <h2>Industry / macro</h2>
+    ${markets ? `<p class="hint">Markets: ${escapeHtml(markets)}</p>` : ""}
     ${driverRows || "<p class='hint'>No industry/macro packet on this memo.</p>"}
+    <h2>Company products</h2>
+    ${productRows || "<p class='hint'>No company/products packet on this memo.</p>"}
     <h2>Operations / working capital</h2>
     ${opsMetricsLine}
     ${opsRows || "<p class='hint'>No operations packet on this memo.</p>"}

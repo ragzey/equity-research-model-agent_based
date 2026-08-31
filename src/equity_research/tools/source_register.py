@@ -45,7 +45,7 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
                 "SEC 10-K",
                 (
                     f"{ticker} accession {accession}, filed {filing_date}. "
-                    "Item 1A and Item 7 excerpts on the ledger."
+                    "Item 1, Item 1A, and Item 7 excerpts on the ledger."
                 ),
                 "SEC EDGAR",
                 str(metadata.get("filing_url") or ""),
@@ -227,6 +227,35 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
             )
         )
 
+    for doc in state.get("web_research") or []:
+        if not isinstance(doc, dict):
+            continue
+        url = str(doc.get("url") or "").strip()
+        if not url:
+            continue
+        title = str(doc.get("title") or "Untitled").strip()
+        publisher = str(doc.get("publisher") or "").strip()
+        used_for = str(doc.get("used_for") or "market")
+        tier = str(doc.get("tier") or "high_quality")
+        label = {
+            "market": "Market research",
+            "industry": "Industry research",
+            "firm": "Firm research",
+        }.get(used_for, "Web research")
+        rows.append(
+            _row(
+                label,
+                title,
+                f"{publisher or 'Allowlisted source'} ({tier.replace('_', ' ')})",
+                url,
+                {
+                    "market": "Industry/macro category demand and market names",
+                    "industry": "Industry/macro cycle, catalysts, and outlook",
+                    "firm": "Company products, mix, and firm watch items",
+                }.get(used_for, "Industry/macro and company/products packets"),
+            )
+        )
+
     rows.append(
         _row(
             "Equity risk premium and tax rate",
@@ -254,10 +283,11 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
         _row(
             "Narrative agents",
             (
-                "Competitive, Qualitative, industry/macro, operations, assumption architect, "
+                "Competitive, Qualitative, industry/macro, company/products, operations, assumption architect, "
                 "assumption reviewer, writer, and independent auditor call OpenAI or "
                 "Gemini on ledger evidence. They may not invent tickers, URLs, or DCF "
-                "inputs. The architect may only pick Python menu labels. The auditor "
+                "inputs. Market/industry/firm URLs appear only when Python fetched an "
+                "allowlisted page. The architect may only pick Python menu labels. The auditor "
                 "may correct narrative; it may not rewrite WACC or DCF."
             ),
             "OpenAI or Gemini Chat Completions (narrative only)",

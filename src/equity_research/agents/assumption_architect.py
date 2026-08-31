@@ -27,6 +27,7 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
     risk_free_rate = fetch_ten_year_treasury_yield()
     packet = state.get("industry_macro_packet") or {}
     operations = state.get("operations_packet") or {}
+    products = state.get("company_products_packet") or {}
     bundle = build_assumption_bundle(state, risk_free_rate=risk_free_rate)
     menus = build_choice_menus(
         bundle,
@@ -95,6 +96,11 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
                         default=str,
                     ),
                     packet_json=json.dumps(packet, indent=2, default=str)[:6000],
+                    company_products_json=json.dumps(
+                        state.get("company_products_packet") or {},
+                        indent=2,
+                        default=str,
+                    )[:6000],
                     operations_json=json.dumps(operations, indent=2, default=str)[:6000],
                     menus_json=json.dumps(compact_menus, indent=2, default=str),
                 ),
@@ -114,6 +120,7 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
         part
         for part in (
             json.dumps(packet, default=str),
+            json.dumps(products, default=str),
             json.dumps(operations, default=str),
             json.dumps(compact_menus, default=str),
             operating_cycle_ledger(bundle["baseline"].get("operating_cycle") or {}),
@@ -133,6 +140,11 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
         "cycle": (packet.get("cycle") or {}).get("view"),
         "demand_inflection": (packet.get("demand_inflection") or {}).get("direction"),
         "rates_view": (packet.get("macro") or {}).get("rates_view"),
+    }
+    proposed["company_products_views"] = {
+        "products": products.get("products"),
+        "mix": (products.get("mix") or {}).get("view"),
+        "pricing_power": (products.get("pricing_power") or {}).get("view"),
     }
     proposed["operations_views"] = {
         "cash_conversion": (operations.get("cash_conversion") or {}).get("view"),

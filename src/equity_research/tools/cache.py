@@ -26,6 +26,7 @@ TTL_CONSENSUS = int(os.getenv("CACHE_TTL_CONSENSUS", str(12 * 3600)))
 TTL_TREASURY = int(os.getenv("CACHE_TTL_TREASURY", str(6 * 3600)))
 TTL_DAMODARAN = int(os.getenv("CACHE_TTL_DAMODARAN", str(30 * 24 * 3600)))
 TTL_PRICE_HISTORY = int(os.getenv("CACHE_TTL_PRICE_HISTORY", str(12 * 3600)))
+TTL_WEB = int(os.getenv("CACHE_TTL_WEB", str(6 * 3600)))
 
 
 def _utc_now() -> datetime:

@@ -3,6 +3,7 @@
 from .aggregator import aggregator_node
 from .assumption_architect import assumption_architect_node
 from .competitive import competitive_analyst_node
+from .company_products import company_products_node
 from .independent_auditor import independent_auditor_node
 from .industry_macro import industry_macro_node
 from .operations import operations_node
@@ -17,6 +18,7 @@ __all__ = [
     "aggregator_node",
     "assumption_architect_node",
     "competitive_analyst_node",
+    "company_products_node",
     "fetch_ten_year_treasury_yield",
     "independent_auditor_node",
     "industry_macro_node",

@@ -18,6 +18,7 @@ from ..prompts.desk import AUDITOR_SYSTEM, AUDITOR_USER
 from ..tools.operating_cycle import operating_cycle_ledger
 from ..tools.pdf_memo import write_memo_pdf
 from ..tools.report_pack import build_report_pack
+from ..tools.web_research import web_research_blob
 from ..utils.grounding import contains_web_link
 from ..utils.llm_client import LLMCallError, chat_json
 
@@ -172,6 +173,7 @@ def allowed_tickers(state: EquityResearchState) -> Set[str]:
 def _filing_blob(state: EquityResearchState) -> str:
     sections = state.get("sec_filing_sections") or {}
     parts = [
+        str(sections.get("item_1") or sections.get("Item 1") or ""),
         str(sections.get("item_1a") or sections.get("Item 1A") or ""),
         str(sections.get("item_7") or sections.get("Item 7") or ""),
     ]
@@ -452,6 +454,14 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "packet": state.get("industry_macro_packet") or {},
         "outlook": _truncate(state.get("industry_outlook"), 1500),
     }
+    company_products = {
+        "packet": state.get("company_products_packet") or {},
+        "instruction": (
+            "Products and mix must be filing or fetched-page quotes. Flag invented "
+            "launch dates, TAM, or URLs. Correct narrative only against Item 1 / 7 "
+            "or allowlisted web excerpts on the ledger."
+        ),
+    }
     architect = {
         "choices": overrides.get("architect_choices"),
         "allowed": overrides.get("architect_allowed"),
@@ -505,6 +515,7 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "competitive_json": json.dumps(competitive, default=str),
         "qualitative_json": json.dumps(qualitative, default=str),
         "industry_macro_json": json.dumps(industry_macro, default=str),
+        "company_products_json": json.dumps(company_products, default=str),
         "architect_json": json.dumps(architect, default=str),
         "operations_json": json.dumps(operations, default=str),
         "reviewer_json": json.dumps(reviewer, default=str),
@@ -626,9 +637,11 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
         summary["report_pack"] = pack
     allowed = allowed_tickers(state)
     filing = _filing_blob(state)
+    web_blob = web_research_blob(state)
     background = " ".join(
         [
             filing,
+            web_blob,
             str(state.get("industry_outlook") or ""),
             str(state.get("qualitative_analysis_summary") or ""),
             " ".join(allowed),
@@ -742,7 +755,7 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
     packet = dict(state.get("industry_macro_packet") or {})
     macro_ledger = "\n".join(
         part
-        for part in (filing, json.dumps(packet, default=str))
+        for part in (filing, web_blob, json.dumps(packet, default=str))
         if part
     )
     macro_narrative = _ground_narrative(
@@ -760,6 +773,33 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
     agent_blocks["industry_macro"] = {
         "action": industry_macro.get("action") or ("correct" if macro_narrative else "pass"),
         "findings": _issues(industry_macro, "industry_macro"),
+    }
+
+    company_section = _section(payload, "company_products")
+    llm_findings.extend(_issues(company_section, "company_products"))
+    products_packet = dict(state.get("company_products_packet") or {})
+    products_ledger = "\n".join(
+        part
+        for part in (filing, web_blob, json.dumps(products_packet, default=str))
+        if part
+    )
+    products_narrative = _ground_narrative(
+        company_section.get("corrected_narrative"),
+        products_ledger,
+        allowed,
+    )
+    if products_narrative:
+        products_packet = dict(products_packet)
+        products_packet["narrative"] = products_narrative
+        updates["company_products_packet"] = products_packet
+        corrections.append("Replaced company/products narrative with auditor-grounded text.")
+        memo_text = _replace_heading_block(
+            memo_text, "### Company products", products_narrative
+        )
+    agent_blocks["company_products"] = {
+        "action": company_section.get("action")
+        or ("correct" if products_narrative else "pass"),
+        "findings": _issues(company_section, "company_products"),
     }
 
     operations_section = _section(payload, "operations")

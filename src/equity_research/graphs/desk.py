@@ -9,6 +9,7 @@ from ..utils.grounding import contains_web_link
 QUALITATIVE = "qualitative_analyst"
 COMPETITIVE = "competitive_analyst"
 INDUSTRY_MACRO = "industry_macro"
+COMPANY_PRODUCTS = "company_products"
 OPERATIONS = "operations"
 ARCHITECT = "assumption_architect"
 REVIEWER = "assumption_reviewer"

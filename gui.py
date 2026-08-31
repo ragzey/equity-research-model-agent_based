@@ -172,6 +172,7 @@ def summarize_state(state: Dict[str, Any]) -> Dict[str, Any]:
         "review_findings": state.get("review_findings") or [],
         "audit_report": state.get("audit_report"),
         "industry_macro_packet": state.get("industry_macro_packet"),
+        "company_products_packet": state.get("company_products_packet"),
         "operations_packet": state.get("operations_packet"),
         "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
