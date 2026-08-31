@@ -28,12 +28,14 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
     packet = state.get("industry_macro_packet") or {}
     operations = state.get("operations_packet") or {}
     products = state.get("company_products_packet") or {}
+    growth_path = state.get("growth_path_packet") or {}
     bundle = build_assumption_bundle(state, risk_free_rate=risk_free_rate)
     menus = build_choice_menus(
         bundle,
         packet,
         risk_free_rate=risk_free_rate,
         operations_packet=operations,
+        growth_path_packet=growth_path,
     )
     compact_menus = {
         "menus": {
@@ -102,6 +104,7 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
                         default=str,
                     )[:6000],
                     operations_json=json.dumps(operations, indent=2, default=str)[:6000],
+                    growth_path_json=json.dumps(growth_path, indent=2, default=str)[:6000],
                     menus_json=json.dumps(compact_menus, indent=2, default=str),
                 ),
             },
@@ -122,6 +125,7 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
             json.dumps(packet, default=str),
             json.dumps(products, default=str),
             json.dumps(operations, default=str),
+            json.dumps(growth_path, default=str),
             json.dumps(compact_menus, default=str),
             operating_cycle_ledger(bundle["baseline"].get("operating_cycle") or {}),
             excerpts,
@@ -150,6 +154,12 @@ def assumption_architect_node(state: EquityResearchState) -> Dict[str, Any]:
         "cash_conversion": (operations.get("cash_conversion") or {}).get("view"),
         "working_capital": (operations.get("working_capital") or {}).get("view"),
         "reinvestment": (operations.get("reinvestment") or {}).get("view"),
+    }
+    proposed["growth_path_views"] = {
+        "scale_view": (growth_path.get("scale_view") or {}).get("view"),
+        "horizon_view": (growth_path.get("horizon_view") or {}).get("view"),
+        "reinvestment_path": (growth_path.get("reinvestment_path") or {}).get("view"),
+        "margin_path": (growth_path.get("margin_path") or {}).get("view"),
     }
     choices = proposed.get("architect_choices") or {}
     body = (

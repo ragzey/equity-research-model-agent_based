@@ -625,8 +625,39 @@ function renderSummary(summary) {
       ? `Implied STC ${Number(opsMetrics.implied_sales_to_capital).toFixed(2)}`
       : "",
   ].filter(Boolean);
-  const opsMetricsLine = metricBits.length
+    const opsMetricsLine = metricBits.length
     ? `<p class="hint">${escapeHtml(metricBits.join(" · "))}</p>`
+    : "";
+  const growthPath = summary.growth_path_packet || {};
+  const gpMetrics = growthPath.metrics || {};
+  const gpRows = [
+    ["Scale", (growthPath.scale_view || {}).view, (growthPath.scale_view || {}).evidence],
+    ["Horizon", (growthPath.horizon_view || {}).view, (growthPath.horizon_view || {}).evidence],
+    ["Reinvestment path", (growthPath.reinvestment_path || {}).view, (growthPath.reinvestment_path || {}).evidence],
+    ["Margin path", (growthPath.margin_path || {}).view, (growthPath.margin_path || {}).evidence],
+  ]
+    .filter((row) => row[1] || row[2])
+    .map(
+      ([label, view, evidence]) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(
+          view && view !== "insufficient" && view !== "not_applicable"
+            ? view
+            : view || "not applicable"
+        )}</div>
+        <div>${escapeHtml(evidence || "No excerpt.")}</div>
+      </div>`
+    )
+    .join("");
+  const gpBits = [
+    gpMetrics.price_to_sales != null ? `P/S ${Number(gpMetrics.price_to_sales).toFixed(1)}x` : "",
+    gpMetrics.historical_cagr != null ? `CAGR ${(Number(gpMetrics.historical_cagr) * 100).toFixed(1)}%` : "",
+    gpMetrics.fade_sales_to_capital != null
+      ? `Fade STC ${Number(gpMetrics.fade_sales_to_capital).toFixed(2)}`
+      : "",
+  ].filter(Boolean);
+  const gpMetricsLine = gpBits.length
+    ? `<p class="hint">${escapeHtml(gpBits.join(" · "))}</p>`
     : "";
   const architect = summary.architect_choices || {};
   const architectRows = Object.keys(architect)
@@ -647,6 +678,9 @@ function renderSummary(summary) {
     <h2>Operations / working capital</h2>
     ${opsMetricsLine}
     ${opsRows || "<p class='hint'>No operations packet on this memo.</p>"}
+    <h2>Growth path</h2>
+    ${gpMetricsLine}
+    ${gpRows || "<p class='hint'>No growth-path packet on this memo.</p>"}
     <h2>Architect labels</h2>
     ${architectRows || "<p class='hint'>No architect choices on this memo.</p>"}
     <h2>Independent audit</h2>

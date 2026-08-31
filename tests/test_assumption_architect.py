@@ -622,10 +622,12 @@ class PacketAndNodeTests(unittest.TestCase):
         self.assertIn("industry_macro", graph.nodes)
         self.assertIn("operations", graph.nodes)
         self.assertIn("company_products", graph.nodes)
+        self.assertIn("growth_path", graph.nodes)
         self.assertIn("assumption_architect", graph.nodes)
-        self.assertIn(("industry_macro", "valuation_router"), edges)
-        self.assertIn(("company_products", "valuation_router"), edges)
-        self.assertIn(("operations", "valuation_router"), edges)
+        self.assertIn(("industry_macro", "growth_path"), edges)
+        self.assertIn(("company_products", "growth_path"), edges)
+        self.assertIn(("operations", "growth_path"), edges)
+        self.assertIn(("growth_path", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 
 

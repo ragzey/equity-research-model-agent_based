@@ -7,7 +7,10 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from .consensus import blend_high_growth_rate
 from .firm_classifier import (
+    MATURE_TERMINAL_MARGIN,
     MAX_HIGH_GROWTH_YEARS,
+    SCALE_TERMINAL_MARGIN,
+    SCALEUP_STRETCH_RATE,
     classify_firm_and_adjust_assumptions,
     extract_operating_baseline,
 )
@@ -25,7 +28,7 @@ YEAR_CHOICES = ("compress", "base", "extend")
 TERMINAL_GROWTH_CHOICES = ("low", "base", "high")
 MARGIN_CHOICES = ("baseline", "proposed")
 CSRP_CHOICES = ("none", "proposed")
-STC_CHOICES = ("heavy", "base", "light")
+STC_CHOICES = ("heavy", "base", "light", "fade", "harvest")
 # Missing allow-list → never reopen stretch labels from live packets.
 CONSERVATIVE_LABELS: Dict[str, Tuple[str, ...]] = {
     "high_growth_rate": ("low", "base"),
@@ -187,8 +190,20 @@ def allowed_terminal_growth_choices(
     return allowed
 
 
-def allowed_stc_choices(operations_packet: Optional[Dict[str, Any]]) -> List[str]:
-    """Heavy/light reinvestment only when the operations packet is evidenced."""
+def _growth_path_view(packet: Optional[Dict[str, Any]], key: str) -> str:
+    return _view((packet or {}).get(key))
+
+
+def growth_path_is_scale_up(packet: Optional[Dict[str, Any]]) -> bool:
+    return _growth_path_view(packet, "scale_view") in {"still_ramping", "stretched"}
+
+
+def allowed_stc_choices(
+    operations_packet: Optional[Dict[str, Any]],
+    *,
+    growth_path_packet: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    """Heavy/light from operations; fade/harvest from the growth-path packet."""
     allowed = ["base"]
     packet = operations_packet or {}
     wc = packet.get("working_capital") or {}
@@ -205,6 +220,11 @@ def allowed_stc_choices(operations_packet: Optional[Dict[str, Any]]) -> List[str
         allowed.append("heavy")
     if releasing and evidenced and not absorbing:
         allowed.append("light")
+    path = _growth_path_view(growth_path_packet, "reinvestment_path")
+    if path == "fade":
+        allowed.append("fade")
+    if path == "harvest":
+        allowed.append("harvest")
     return allowed
 
 
@@ -327,7 +347,15 @@ def build_assumption_bundle(
         classifier_sales_to_capital=baseline.get("sales_to_capital"),
     )
     baseline["operating_cycle"] = cycle
-    if cycle.get("observed_sales_to_capital") is not None:
+    ops_observed = ((state.get("operations_packet") or {}).get("metrics") or {}).get(
+        "observed_sales_to_capital"
+    )
+    if ops_observed is not None:
+        baseline["sales_to_capital"] = clip_sales_to_capital(
+            ops_observed, baseline.get("sales_to_capital")
+        )
+        baseline["sales_to_capital_source"] = "operations_packet"
+    elif cycle.get("observed_sales_to_capital") is not None:
         baseline["sales_to_capital"] = cycle["observed_sales_to_capital"]
         baseline["sales_to_capital_source"] = cycle.get("source")
     proposed["sales_to_capital"] = clip_sales_to_capital(
@@ -359,6 +387,26 @@ def build_assumption_bundle(
         f"firm-type spread), not a 2.5% cap. Hard ceiling {cap:.1%} "
         f"(min of 5% and Rf − 50bp)."
     )
+    growth_path = state.get("growth_path_packet") or {}
+    margin_path = _growth_path_view(growth_path, "margin_path")
+    if margin_path == "scale":
+        proposed["terminal_margin"] = max(
+            float(proposed.get("terminal_margin") or 0.0),
+            SCALE_TERMINAL_MARGIN,
+        )
+        proposed.setdefault("rationales", {})["terminal_margin"] = (
+            f"Growth-path margin_path is scale; terminal margin is at least "
+            f"{SCALE_TERMINAL_MARGIN:.0%} rather than last year's print."
+        )
+    elif margin_path == "mature":
+        proposed["terminal_margin"] = max(
+            float(proposed.get("terminal_margin") or 0.0),
+            MATURE_TERMINAL_MARGIN,
+        )
+        proposed.setdefault("rationales", {})["terminal_margin"] = (
+            f"Growth-path margin_path is mature; terminal margin is "
+            f"{MATURE_TERMINAL_MARGIN:.0%}."
+        )
     return {"baseline": baseline, "proposed": proposed}
 
 
@@ -368,6 +416,7 @@ def build_choice_menus(
     *,
     risk_free_rate: Optional[float] = None,
     operations_packet: Optional[Dict[str, Any]] = None,
+    growth_path_packet: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """Discrete labeled candidates. High/extend are omitted when evidence is thin."""
     baseline = bundle["baseline"]
@@ -390,10 +439,16 @@ def build_choice_menus(
     if cap > policy_g + 1e-9:
         terminal_menu["high"] = cap
 
+    stretch_high = float(high)
+    if (
+        is_scale_up_lifecycle(firm_type)
+        and _growth_path_view(growth_path_packet, "scale_view") == "still_ramping"
+    ):
+        stretch_high = SCALEUP_STRETCH_RATE
     growth_menu = {
         "low": float(low),
         "base": float(proposed["high_growth_rate"]),
-        "high": float(high),
+        "high": stretch_high,
     }
     year_menu = {
         "compress": years_compress,
@@ -409,15 +464,26 @@ def build_choice_menus(
         "proposed": float(proposed.get("company_specific_risk_premium") or 0.0),
     }
     base_stc = clip_sales_to_capital(proposed.get("sales_to_capital"), 1.8)
+    stable_stc = clip_sales_to_capital(
+        baseline.get("stable_sales_to_capital") or proposed.get("stable_sales_to_capital"),
+        2.0,
+    )
+    fade_stc = clip_sales_to_capital((base_stc + stable_stc) / 2.0, base_stc)
     stc_menu = {
         "heavy": clip_sales_to_capital(base_stc * 0.75, base_stc),
         "base": base_stc,
         "light": clip_sales_to_capital(base_stc * 1.25, base_stc),
+        "fade": fade_stc,
+        "harvest": stable_stc,
     }
     if abs(stc_menu["heavy"] - stc_menu["base"]) < 1e-9:
         stc_menu.pop("heavy", None)
     if abs(stc_menu["light"] - stc_menu["base"]) < 1e-9:
         stc_menu.pop("light", None)
+    if abs(stc_menu["fade"] - stc_menu["base"]) < 1e-9:
+        stc_menu.pop("fade", None)
+    if abs(stc_menu["harvest"] - stc_menu["base"]) < 1e-9:
+        stc_menu.pop("harvest", None)
 
     allowed = {
         "high_growth_rate": [
@@ -449,7 +515,9 @@ def build_choice_menus(
     allowed["sales_to_capital"] = [
         key
         for key in allowed["sales_to_capital"]
-        if key in allowed_stc_choices(operations_packet)
+        if key in allowed_stc_choices(
+            operations_packet, growth_path_packet=growth_path_packet
+        )
     ]
     if abs(margin_menu["baseline"] - margin_menu["proposed"]) < 1e-12:
         allowed["terminal_margin"] = ["baseline"]
@@ -492,7 +560,7 @@ def apply_architect_choices(
         ("company_specific_risk_premium", "company_specific_risk_premium", "none"),
         ("sales_to_capital", "sales_to_capital", "base"),
     ]
-    needs_reason = {"high", "extend", "heavy", "light", "proposed"}
+    needs_reason = {"high", "extend", "heavy", "light", "fade", "harvest", "proposed"}
     for key, menu_name, default in specs:
         menu = menus.get(menu_name) or {}
         if not menu:

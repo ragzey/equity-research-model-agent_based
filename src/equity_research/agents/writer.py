@@ -357,6 +357,60 @@ def _operations_driver_table(packet: Dict[str, Any]) -> str:
     return body
 
 
+def _growth_path_table(packet: Dict[str, Any]) -> str:
+    if not packet or not packet.get("applicable"):
+        return ""
+    metrics = packet.get("metrics") or {}
+    rows = [
+        (
+            "Scale",
+            (packet.get("scale_view") or {}).get("view"),
+            (packet.get("scale_view") or {}).get("evidence"),
+        ),
+        (
+            "Horizon",
+            (packet.get("horizon_view") or {}).get("view"),
+            (packet.get("horizon_view") or {}).get("evidence"),
+        ),
+        (
+            "Reinvestment path",
+            (packet.get("reinvestment_path") or {}).get("view"),
+            (packet.get("reinvestment_path") or {}).get("evidence"),
+        ),
+        (
+            "Margin path",
+            (packet.get("margin_path") or {}).get("view"),
+            (packet.get("margin_path") or {}).get("evidence"),
+        ),
+    ]
+    lines = [
+        "### Growth path",
+        "",
+        "| Driver | View | Ledger evidence |",
+        "|---|---|---|",
+    ]
+    for label, view, evidence in rows:
+        lines.append(
+            f"| {label} | {view or 'insufficient'} | "
+            f"{' '.join(str(evidence or '').split()) or 'n/a'} |"
+        )
+    if metrics.get("price_to_sales") is not None:
+        lines.append(
+            f"| Price-to-sales | {_fmt_number(metrics.get('price_to_sales'), 1)}x | "
+            "Market cap / last revenue |"
+        )
+    if metrics.get("fade_sales_to_capital") is not None:
+        lines.append(
+            f"| Fade sales-to-capital | {_fmt_number(metrics.get('fade_sales_to_capital'), 2)} | "
+            "Midpoint of observed build-phase STC and the stable ratio |"
+        )
+    narrative = str(packet.get("narrative") or "").strip()
+    body = "\n".join(lines) + "\n"
+    if narrative:
+        body += f"\n### Growth-path commentary\n\n{narrative}\n"
+    return body
+
+
 def _pnl_forecast_table(rows: List[Dict[str, Any]]) -> str:
     if not rows:
         return "Operating P&L forecast unavailable."
@@ -721,6 +775,11 @@ def _synthesize_narratives(
                         indent=2,
                         default=str,
                     )[:4000],
+                    growth_path_json=json.dumps(
+                        state.get("growth_path_packet") or {},
+                        indent=2,
+                        default=str,
+                    )[:4000],
                     scenarios_json=json.dumps(
                         pack.get("operating_scenarios") or {},
                         indent=2,
@@ -819,6 +878,7 @@ def _write_gui_sidecar(
         "industry_macro_packet": state.get("industry_macro_packet"),
         "company_products_packet": state.get("company_products_packet"),
         "operations_packet": state.get("operations_packet"),
+        "growth_path_packet": state.get("growth_path_packet"),
         "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
         "memo_name": report_path.name,
@@ -965,6 +1025,7 @@ The table is Yahoo consensus versus the accepted model. Gaps are the thesis; the
 {_watch_table("Industry watch items", (state.get("industry_macro_packet") or {}).get("industry_catalysts"))}
 {_company_products_table(state.get("company_products_packet") or {})}
 {_operations_driver_table(state.get("operations_packet") or {})}
+{_growth_path_table(state.get("growth_path_packet") or {})}
 ### Industry outlook
 
 {narratives["industry_outlook"]}

@@ -189,6 +189,7 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertIn("industry_macro", graph.nodes)
         self.assertIn("company_products", graph.nodes)
         self.assertIn("operations", graph.nodes)
+        self.assertIn("growth_path", graph.nodes)
         self.assertIn("assumption_architect", graph.nodes)
 
 

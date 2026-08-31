@@ -141,6 +141,7 @@ def _menus_from_state(state: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, 
         state.get("industry_macro_packet") or {},
         risk_free_rate=inputs.get("risk_free_rate"),
         operations_packet=state.get("operations_packet") or {},
+        growth_path_packet=state.get("growth_path_packet") or {},
     )
     rebuilt_allowed = dict(built.get("allowed") or {})
     rebuilt_menus = {key: value for key, value in built.items() if key != "allowed"}

@@ -442,9 +442,11 @@ class GraphWiringTests(unittest.TestCase):
         graph = build_research_graph()
         edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
         self.assertIn("operations", graph.nodes)
-        self.assertIn(("operations", "valuation_router"), edges)
-        self.assertIn(("industry_macro", "valuation_router"), edges)
-        self.assertIn(("company_products", "valuation_router"), edges)
+        self.assertIn("growth_path", graph.nodes)
+        self.assertIn(("operations", "growth_path"), edges)
+        self.assertIn(("industry_macro", "growth_path"), edges)
+        self.assertIn(("company_products", "growth_path"), edges)
+        self.assertIn(("growth_path", "valuation_router"), edges)
 
 
 if __name__ == "__main__":

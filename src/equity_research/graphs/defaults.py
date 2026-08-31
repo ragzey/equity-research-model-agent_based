@@ -48,6 +48,7 @@ def initial_state(
         industry_macro_packet=None,
         company_products_packet=None,
         operations_packet=None,
+        growth_path_packet=None,
         event_calendar=None,
         dcf_overrides=None,
         valuation_sensitivity=None,

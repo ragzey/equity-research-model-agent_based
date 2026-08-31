@@ -39,7 +39,13 @@ SCALEUP_CAGR = 0.25
 MATURE_GROWTH_REFERENCE = 0.07
 MIN_HIGH_GROWTH_YEARS = 2
 MAX_HIGH_GROWTH_YEARS = 10
-MAX_HIGH_GROWTH_RATE = 0.50
+# Base clip for the scale-up classifier rate. Stretch (menu "high") can go
+# to SCALEUP_STRETCH_RATE when the growth-path packet says still_ramping.
+SCALEUP_BASE_CAP = 0.50
+SCALEUP_STRETCH_RATE = 0.80
+MAX_HIGH_GROWTH_RATE = SCALEUP_STRETCH_RATE
+SCALE_TERMINAL_MARGIN = 0.18
+MATURE_TERMINAL_MARGIN = 0.22
 
 
 def is_financial_services_firm(info: Dict[str, Any]) -> bool:
@@ -231,7 +237,7 @@ def classify_firm_and_adjust_assumptions(
     if is_scale_up:
         firm_type = "Scale-up High-Growth"
         size_premium = 0.010
-        growth_low, growth_high = 0.20, MAX_HIGH_GROWTH_RATE
+        growth_low, growth_high = 0.20, SCALEUP_BASE_CAP
         high_growth_rate = min(max(revenue_cagr, growth_low), growth_high)
         sales_to_capital = 1.3
         high_growth_years, transition_years = 8, 5

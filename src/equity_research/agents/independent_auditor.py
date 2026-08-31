@@ -476,6 +476,13 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
             "working-capital numbers. Correct narrative only against the ledger."
         ),
     }
+    growth_path = {
+        "packet": state.get("growth_path_packet") or {},
+        "instruction": (
+            "Python CAGR, price-to-sales, and fade sales-to-capital are frozen. "
+            "Flag invented TAM. Correct narrative only against the metric ledger."
+        ),
+    }
     quant = {
         "valuation_method": pack.get("valuation_method") or state.get("valuation_method"),
         "is_math_verified": bool(state.get("is_math_verified")),
@@ -518,6 +525,7 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "company_products_json": json.dumps(company_products, default=str),
         "architect_json": json.dumps(architect, default=str),
         "operations_json": json.dumps(operations, default=str),
+        "growth_path_json": json.dumps(growth_path, default=str),
         "reviewer_json": json.dumps(reviewer, default=str),
         "quant_json": json.dumps(quant, default=str),
         "writer_json": json.dumps(writer, default=str),
@@ -834,6 +842,39 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
         "action": operations_section.get("action")
         or ("correct" if operations_narrative else "pass"),
         "findings": _issues(operations_section, "operations"),
+    }
+
+    growth_section = _section(payload, "growth_path")
+    llm_findings.extend(_issues(growth_section, "growth_path"))
+    growth_packet = dict(
+        updates.get("growth_path_packet") or state.get("growth_path_packet") or {}
+    )
+    growth_ledger = "\n".join(
+        part
+        for part in (
+            filing,
+            json.dumps(growth_packet.get("metrics") or {}, default=str),
+            str(growth_packet.get("narrative") or ""),
+        )
+        if part
+    )
+    growth_narrative = _ground_narrative(
+        growth_section.get("corrected_narrative"),
+        growth_ledger,
+        allowed,
+    )
+    if growth_narrative:
+        growth_packet = dict(growth_packet)
+        growth_packet["narrative"] = growth_narrative
+        updates["growth_path_packet"] = growth_packet
+        corrections.append("Replaced growth-path narrative with auditor-grounded text.")
+        memo_text = _replace_heading_block(
+            memo_text, "### Growth-path commentary", growth_narrative
+        )
+    agent_blocks["growth_path"] = {
+        "action": growth_section.get("action")
+        or ("correct" if growth_narrative else "pass"),
+        "findings": _issues(growth_section, "growth_path"),
     }
 
     architect_section = _section(payload, "architect")

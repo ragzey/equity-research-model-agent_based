@@ -89,6 +89,11 @@ def _llm_decisions(
             indent=2,
             default=str,
         )[:6000],
+        growth_path_json=json.dumps(
+            state.get("growth_path_packet") or {},
+            indent=2,
+            default=str,
+        )[:6000],
         transcript=transcript,
         qualitative=(state.get("qualitative_analysis_summary") or "")[:6000],
         outlook=(state.get("industry_outlook") or "")[:4000],
@@ -170,6 +175,7 @@ def valuation_assumption_reviewer_node(
         "architect_allowed",
         "industry_macro_views",
         "operations_views",
+        "growth_path_views",
         "baseline_firm_type",
     ):
         if proposed.get(carry) is not None:
