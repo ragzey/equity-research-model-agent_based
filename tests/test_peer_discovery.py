@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from equity_research.agents.competitive import select_comparable_set
 from equity_research.graphs.defaults import initial_state
+from equity_research.tools.peer_analysis import _median_ev_ebitda
 from equity_research.tools.peer_discovery import (
     apply_named_picks,
     clip_rejected_picks,
@@ -187,6 +188,13 @@ class CompetitiveSelectionTests(unittest.TestCase):
         self.assertEqual(result["mode"], "llm")
         self.assertEqual(result["selected"], ["ROST", "BURL"])
         self.assertNotIn("NOTREAL", result["selected"])
+
+
+class PeerMedianTests(unittest.TestCase):
+    def test_distressed_ev_ebitda_is_dropped_from_the_median(self):
+        self.assertAlmostEqual(_median_ev_ebitda([5.0, 16.0, 16.0]), 16.0)
+        self.assertAlmostEqual(_median_ev_ebitda([12.0, 13.0, 14.0]), 13.0)
+        self.assertIsNone(_median_ev_ebitda([]))
 
 
 if __name__ == "__main__":

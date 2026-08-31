@@ -18,6 +18,7 @@ from ..agents.qualitative import qualitative_analyst_node
 from ..agents.quant import quant_analyst_node
 from ..agents.reviewer import valuation_assumption_reviewer_node
 from ..agents.sensitivity import sensitivity_analyst_node
+from ..agents.valuation_mix import valuation_mix_node
 from ..agents.valuation_router import (
     route_valuation_method,
     unsupported_financial_node,
@@ -35,7 +36,9 @@ def build_research_graph():
     company/products, and operations then run in parallel: demand/cycle versus
     products/mix versus CCC. Growth-path runs after those packets on scale-up
     names and writes the horizon, reinvestment-fade, and margin-path labels.
-    On the FCFF path the assumption architect picks bounded
+    Valuation-mix then picks a labeled DCF/relative weight from a Python menu
+    using firm type, peer fit, and the industry packet. The LLM cannot type a
+    percentage. On the FCFF path the assumption architect picks bounded
     menu labels; the reviewer only accepts or rejects. Quant remains Python for
     WACC, the operating P&L, and FCFF.     Sensitivity adds operational bear/base/bull
     from the same menus. The writer puts a Python thesis and Street table on
@@ -50,6 +53,7 @@ def build_research_graph():
     workflow.add_node("company_products", company_products_node)
     workflow.add_node("operations", operations_node)
     workflow.add_node("growth_path", growth_path_node)
+    workflow.add_node("valuation_mix", valuation_mix_node)
     workflow.add_node("valuation_router", valuation_router_node)
     workflow.add_node("assumption_architect", assumption_architect_node)
     workflow.add_node(
@@ -82,7 +86,8 @@ def build_research_graph():
         ["industry_macro", "company_products", "operations"],
         "growth_path",
     )
-    workflow.add_edge("growth_path", "valuation_router")
+    workflow.add_edge("growth_path", "valuation_mix")
+    workflow.add_edge("valuation_mix", "valuation_router")
     workflow.add_conditional_edges(
         "valuation_router",
         route_valuation_method,

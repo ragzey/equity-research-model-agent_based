@@ -49,6 +49,7 @@ def initial_state(
         company_products_packet=None,
         operations_packet=None,
         growth_path_packet=None,
+        valuation_mix_packet=None,
         event_calendar=None,
         dcf_overrides=None,
         valuation_sensitivity=None,

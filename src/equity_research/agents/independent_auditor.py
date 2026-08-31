@@ -483,6 +483,14 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
             "Flag invented TAM. Correct narrative only against the metric ledger."
         ),
     }
+    valuation_mix = {
+        "packet": state.get("valuation_mix_packet") or {},
+        "instruction": (
+            "Mix label and 90/10, 70/30, 55/45 weights are Python. Flag an invented "
+            "percentage. Correct narrative only against the mix ledger. Do not "
+            "replace fair value or the blend."
+        ),
+    }
     quant = {
         "valuation_method": pack.get("valuation_method") or state.get("valuation_method"),
         "is_math_verified": bool(state.get("is_math_verified")),
@@ -526,6 +534,7 @@ def _audit_packets(state: EquityResearchState, pack: Dict[str, Any]) -> Dict[str
         "architect_json": json.dumps(architect, default=str),
         "operations_json": json.dumps(operations, default=str),
         "growth_path_json": json.dumps(growth_path, default=str),
+        "valuation_mix_json": json.dumps(valuation_mix, default=str),
         "reviewer_json": json.dumps(reviewer, default=str),
         "quant_json": json.dumps(quant, default=str),
         "writer_json": json.dumps(writer, default=str),
@@ -875,6 +884,41 @@ def independent_auditor_node(state: EquityResearchState) -> Dict[str, Any]:
         "action": growth_section.get("action")
         or ("correct" if growth_narrative else "pass"),
         "findings": _issues(growth_section, "growth_path"),
+    }
+
+    mix_section = _section(payload, "valuation_mix")
+    llm_findings.extend(_issues(mix_section, "valuation_mix"))
+    mix_packet = dict(
+        updates.get("valuation_mix_packet") or state.get("valuation_mix_packet") or {}
+    )
+    mix_ledger = "\n".join(
+        part
+        for part in (
+            filing,
+            json.dumps(mix_packet.get("metrics") or {}, default=str),
+            str(mix_packet.get("narrative") or ""),
+            str((mix_packet.get("mix_view") or {}).get("evidence") or ""),
+        )
+        if part
+    )
+    mix_narrative = _ground_narrative(
+        mix_section.get("corrected_narrative"),
+        mix_ledger,
+        allowed,
+    )
+    if mix_narrative:
+        mix_packet = dict(mix_packet)
+        mix_packet["narrative"] = mix_narrative
+        updates["valuation_mix_packet"] = mix_packet
+        corrections.append("Replaced valuation-mix narrative with auditor-grounded text.")
+        memo_text = _replace_heading_block(
+            memo_text, "### Valuation-mix commentary", mix_narrative
+        )
+    agent_blocks["valuation_mix"] = {
+        "action": mix_section.get("action")
+        or ("correct" if mix_narrative else "pass"),
+        "findings": _issues(mix_section, "valuation_mix"),
+        "model_not_rewritten": True,
     }
 
     architect_section = _section(payload, "architect")

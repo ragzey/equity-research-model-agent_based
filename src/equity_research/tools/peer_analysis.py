@@ -102,6 +102,28 @@ def _median(values: List[float]) -> Optional[float]:
     return round((sorted_vals[mid - 1] + sorted_vals[mid]) / 2.0, 4)
 
 
+DISTRESSED_EV_EBITDA_RATIO = 0.50
+
+
+def _median_ev_ebitda(values: List[float]) -> Optional[float]:
+    """Drop distressed cheap outliers, then take the median of what remains.
+
+    A 5x department-store multiple should not pull an off-price peer set
+    that otherwise trades at mid-teens EV/EBITDA.
+    """
+    core = [value for value in values if value is not None and value > 0]
+    if not core:
+        return None
+    preliminary = _median(core)
+    if preliminary is None or len(core) < 3:
+        return preliminary
+    floor = preliminary * DISTRESSED_EV_EBITDA_RATIO
+    kept = [value for value in core if value >= floor]
+    if len(kept) < 2:
+        return preliminary
+    return _median(kept)
+
+
 def build_peer_comparison_matrix(
     target_ticker: str,
     competitor_tickers: List[str],
@@ -133,7 +155,10 @@ def build_peer_comparison_matrix(
             for sym in peers
             if (v := _safe_float(by_ticker.get(sym, {}).get(metric))) is not None
         ]
-        peer_medians[metric] = _median(peer_values)
+        if metric == "ev_to_ebitda":
+            peer_medians[metric] = _median_ev_ebitda(peer_values)
+        else:
+            peer_medians[metric] = _median(peer_values)
 
     return {
         "target": target,

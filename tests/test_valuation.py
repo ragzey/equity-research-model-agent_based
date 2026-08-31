@@ -100,6 +100,46 @@ class ClassifierTests(unittest.TestCase):
         self.assertGreater(result["price_to_sales"], 15)
         self.assertAlmostEqual(result["high_growth_rate_bounds"][1], 0.20)
 
+    def test_double_digit_cagr_large_cap_is_high_growth_not_mature(self):
+        income = {
+            datetime(2024, 12, 31): {
+                "Total Revenue": 10_000_000_000.0,
+                "Operating Income": 2_000_000_000.0,
+            },
+            datetime(2025, 12, 31): {
+                "Total Revenue": 11_200_000_000.0,
+                "Operating Income": 2_240_000_000.0,
+            },
+        }
+        result = classify_firm_and_adjust_assumptions(
+            50_000_000_000,
+            income,
+            {"sector": "Consumer Defensive", "industry": "Beverages"},
+        )
+        self.assertEqual(result["firm_type"], "High-Growth Large-Cap")
+        self.assertAlmostEqual(result["high_growth_rate"], 0.12)
+        self.assertEqual(result["high_growth_years"], 5)
+
+    def test_mid_single_digit_cagr_large_cap_stays_mature(self):
+        income = {
+            datetime(2024, 12, 31): {
+                "Total Revenue": 50_000_000_000.0,
+                "Operating Income": 5_000_000_000.0,
+            },
+            datetime(2025, 12, 31): {
+                "Total Revenue": 53_000_000_000.0,
+                "Operating Income": 5_300_000_000.0,
+            },
+        }
+        result = classify_firm_and_adjust_assumptions(
+            150_000_000_000,
+            income,
+            {"sector": "Consumer Cyclical", "industry": "Apparel Retail"},
+        )
+        self.assertEqual(result["firm_type"], "Mature Large-Cap")
+        self.assertEqual(result["high_growth_years"], 3)
+        self.assertAlmostEqual(result["high_growth_rate_bounds"][1], 0.07)
+
     def test_financial_services_firm_is_out_of_scope(self):
         result = classify_firm_and_adjust_assumptions(
             50_000_000_000,

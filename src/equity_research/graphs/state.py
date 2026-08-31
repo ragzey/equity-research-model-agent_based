@@ -50,6 +50,7 @@ class EquityResearchState(TypedDict):
     company_products_packet: Optional[Dict[str, Any]]  # Item 1 products, mix, firm catalysts
     operations_packet: Optional[Dict[str, Any]]  # CCC, NWC, reinvestment views + metrics
     growth_path_packet: Optional[Dict[str, Any]]  # Scale-up horizon, STC fade, margin path
+    valuation_mix_packet: Optional[Dict[str, Any]]  # Labeled DCF / relative mix from firm + industry
     event_calendar: Optional[List[Dict[str, Any]]]  # Yahoo earnings / dividend dates
     dcf_overrides: Optional[Dict[str, Any]]  # Architect candidates after reviewer veto
     valuation_sensitivity: Optional[Dict[str, Any]]  # Serializable WACC/g grid

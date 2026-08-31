@@ -357,7 +357,8 @@ class IndependentAuditorNodeTests(unittest.TestCase):
         self.assertIn(("industry_macro", "growth_path"), edges)
         self.assertIn(("company_products", "growth_path"), edges)
         self.assertIn(("operations", "growth_path"), edges)
-        self.assertIn(("growth_path", "valuation_router"), edges)
+        self.assertIn(("growth_path", "valuation_mix"), edges)
+        self.assertIn(("valuation_mix", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 
 

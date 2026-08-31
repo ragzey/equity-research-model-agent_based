@@ -323,6 +323,25 @@ class SalesToCapitalMenuTests(unittest.TestCase):
         self.assertIn("heavy", allowed)
         self.assertNotIn("light", allowed)
 
+    def test_inventory_build_with_stable_ccc_does_not_unlock_heavy(self):
+        allowed = allowed_stc_choices(
+            {
+                "working_capital": {
+                    "view": "absorbing",
+                    "evidence": "Python working-capital view is absorbing.",
+                },
+                "cash_conversion": {
+                    "view": "stable",
+                    "evidence": "Python cash-conversion view is stable.",
+                },
+                "reinvestment": {
+                    "view": "typical",
+                    "evidence": "Python reinvestment view is typical.",
+                },
+            }
+        )
+        self.assertEqual(allowed, ["base"])
+
     def test_releasing_evidence_unlocks_light(self):
         allowed = allowed_stc_choices(_releasing_packet())
         self.assertIn("light", allowed)
@@ -446,7 +465,8 @@ class GraphWiringTests(unittest.TestCase):
         self.assertIn(("operations", "growth_path"), edges)
         self.assertIn(("industry_macro", "growth_path"), edges)
         self.assertIn(("company_products", "growth_path"), edges)
-        self.assertIn(("growth_path", "valuation_router"), edges)
+        self.assertIn(("growth_path", "valuation_mix"), edges)
+        self.assertIn(("valuation_mix", "valuation_router"), edges)
 
 
 if __name__ == "__main__":

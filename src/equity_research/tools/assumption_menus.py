@@ -50,6 +50,10 @@ def is_scale_up_lifecycle(firm_type: Optional[str]) -> bool:
     return "scale-up" in str(firm_type or "").strip().lower()
 
 
+def is_mature_lifecycle(firm_type: Optional[str]) -> bool:
+    return "mature" in str(firm_type or "").strip().lower()
+
+
 def economy_terminal_cap(risk_free_rate: Optional[float]) -> float:
     """Stable g cannot exceed expected nominal growth. Rf is the economy proxy."""
     if risk_free_rate is None:
@@ -130,10 +134,12 @@ def _view(block: Any) -> str:
 
 
 def _hostile_macro(packet: Optional[Dict[str, Any]]) -> bool:
+    """A recession case needs a downswing plus weak demand, not one web snippet."""
     packet = packet or {}
-    return _view(packet.get("cycle")) == "downswing" or _view(
-        packet.get("demand_inflection")
-    ) == "negative"
+    cycle_down = _view(packet.get("cycle")) == "downswing"
+    inflect_neg = _view(packet.get("demand_inflection")) == "negative"
+    below = _view(packet.get("category_growth")) == "below_history"
+    return cycle_down and (inflect_neg or below)
 
 
 def _constructive_macro(packet: Optional[Dict[str, Any]]) -> bool:
@@ -151,9 +157,18 @@ def allowed_growth_choices(
     *,
     firm_type: Optional[str] = None,
 ) -> List[str]:
-    """High-band growth requires evidenced above-history, or a scale-up lifecycle."""
-    allowed = ["low", "base"]
+    """High-band growth requires evidenced above-history, or a scale-up lifecycle.
+
+    Growth / scale-up names stay on the classifier base rate unless the
+    industry packet shows a hostile cycle or below-history demand. Mature
+    names still have a low label.
+    """
+    allowed = ["base"]
     growth = (packet or {}).get("category_growth") or {}
+    below = _view(growth) == "below_history" and _has_evidence(growth)
+    unclassified = not str(firm_type or "").strip()
+    if unclassified or _hostile_macro(packet) or below:
+        allowed = ["low", "base"]
     if is_scale_up_lifecycle(firm_type) or (
         _view(growth) == "above_history" and _has_evidence(growth)
     ):
@@ -166,11 +181,19 @@ def allowed_year_choices(
     *,
     firm_type: Optional[str] = None,
 ) -> List[str]:
-    """Extend the horizon when demand is constructive or the firm is a scale-up."""
-    allowed = ["compress", "base"]
+    """Mature names stay on the classifier horizon unless the cycle is hostile.
+
+    High-growth and scale-up names get extend without a constructive industry
+    packet. Compress needs a ledger downswing plus weak demand.
+    """
     if _hostile_macro(packet):
-        return allowed
-    if is_scale_up_lifecycle(firm_type) or _constructive_macro(packet):
+        return ["compress", "base"]
+    allowed = ["base"]
+    if (
+        is_high_growth_lifecycle(firm_type)
+        or is_scale_up_lifecycle(firm_type)
+        or _constructive_macro(packet)
+    ):
         allowed.append("extend")
     return allowed
 
@@ -183,7 +206,10 @@ def allowed_terminal_growth_choices(
 ) -> List[str]:
     """High stable-g is for high-growth firms or an evidenced constructive category."""
     menu = menus.get("terminal_growth_rate") or {}
-    allowed = [choice for choice in ("low", "base") if choice in menu]
+    below = _view((packet or {}).get("category_growth")) == "below_history"
+    allowed = [choice for choice in ("base",) if choice in menu]
+    if "low" in menu and (_hostile_macro(packet) or below):
+        allowed.insert(0, "low")
     unlocked = is_high_growth_lifecycle(firm_type) or _constructive_macro(packet)
     if "high" in menu and unlocked and not _hostile_macro(packet):
         allowed.append("high")
@@ -209,7 +235,8 @@ def allowed_stc_choices(
     wc = packet.get("working_capital") or {}
     ccc = packet.get("cash_conversion") or {}
     reinvest = packet.get("reinvestment") or {}
-    absorbing = _view(wc) == "absorbing" or _view(ccc) == "lengthening" or _view(reinvest) == "heavy"
+    # One year of inventory build with a stable CCC is not a heavy-reinvestment path.
+    absorbing = _view(ccc) == "lengthening" or _view(reinvest) == "heavy"
     releasing = (
         _view(wc) == "releasing"
         or _view(ccc) == "shortening"

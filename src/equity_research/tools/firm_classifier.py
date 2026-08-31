@@ -221,7 +221,9 @@ def classify_firm_and_adjust_assumptions(
 
     is_large = cap >= 10_000_000_000
     is_small = cap < 2_000_000_000
-    is_high_growth = revenue_cagr > 0.15
+    # 10% is the bottom of the high-growth large-cap band. Names growing
+    # 10–15% are growth stocks, not mature 2–7% compounders.
+    is_high_growth = revenue_cagr >= 0.10
     price_to_sales = cap / base_revenue if base_revenue else None
     # P/S alone is not enough: ordinary high-growth large-caps stay on the
     # 8–20% band. Scale-up needs hyper growth versus a mature run-rate, and
@@ -262,7 +264,7 @@ def classify_firm_and_adjust_assumptions(
         high_growth_rate = min(max(revenue_cagr, growth_low), growth_high)
         sales_to_capital = 2.2
         high_growth_years, transition_years = 3, 4
-        terminal_margin = max(0.08, min(current_margin * 0.95, 0.25))
+        terminal_margin = max(0.08, min(current_margin, 0.25))
         stable_sales_to_capital = 2.0
     elif is_small and is_high_growth:
         firm_type = "High-Growth Small-Cap"

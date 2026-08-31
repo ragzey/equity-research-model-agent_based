@@ -190,6 +190,7 @@ class DeskProtocolTests(unittest.TestCase):
         self.assertIn("company_products", graph.nodes)
         self.assertIn("operations", graph.nodes)
         self.assertIn("growth_path", graph.nodes)
+        self.assertIn("valuation_mix", graph.nodes)
         self.assertIn("assumption_architect", graph.nodes)
 
 

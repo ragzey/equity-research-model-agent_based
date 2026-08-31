@@ -442,6 +442,10 @@ function renderSummary(summary) {
   const peerChip = peers.length
     ? `<span class="chip">peers ${escapeHtml(peers.join(" "))} (${escapeHtml(peerMode)})</span>`
     : "";
+  const mixChip =
+    pack.dcf_weight != null && pack.relative_weight != null
+      ? `<span class="chip">mix ${(Number(pack.dcf_weight) * 100).toFixed(0)}/${(Number(pack.relative_weight) * 100).toFixed(0)}${pack.valuation_mix ? ` ${escapeHtml(String(pack.valuation_mix))}` : ""}</span>`
+      : "";
   $("#identity").innerHTML = `
     <div class="ticker">${name}</div>
     <span class="chip">${escapeHtml(summary.ticker || "")}</span>
@@ -452,6 +456,7 @@ function renderSummary(summary) {
     ${verified}
     <span class="chip">desk ${desk}</span>
     ${peerChip}
+    ${mixChip}
   `;
 
   const rating = pack.model_rating || summary.model_rating;
@@ -482,6 +487,11 @@ function renderSummary(summary) {
     ? `
     <div class="metric"><span>DCF</span><strong>${fmtUsd(pack.dcf_value != null ? pack.dcf_value : summary.display_value)}</strong></div>
     <div class="metric"><span>Relative EV/EBITDA</span><strong>${fmtUsd(pack.relative_value)}</strong></div>
+    <div class="metric"><span>Mix</span><strong>${
+      pack.dcf_weight != null && pack.relative_weight != null
+        ? `${(Number(pack.dcf_weight) * 100).toFixed(0)}/${(Number(pack.relative_weight) * 100).toFixed(0)}`
+        : "N/A"
+    }</strong></div>
     <div class="metric"><span>WACC</span><strong>${fmtPct(summary.wacc)}</strong></div>
     <div class="metric"><span>Y1 model EPS</span><strong>${fmtUsd(pack.year1_eps)}</strong></div>
     <div class="metric"><span>vs Street PT</span><strong>${fmtSignedPct(pack.street && pack.street.pt_gap != null ? pack.street.pt_gap : null)}</strong></div>
@@ -625,7 +635,7 @@ function renderSummary(summary) {
       ? `Implied STC ${Number(opsMetrics.implied_sales_to_capital).toFixed(2)}`
       : "",
   ].filter(Boolean);
-    const opsMetricsLine = metricBits.length
+  const opsMetricsLine = metricBits.length
     ? `<p class="hint">${escapeHtml(metricBits.join(" · "))}</p>`
     : "";
   const growthPath = summary.growth_path_packet || {};
@@ -659,6 +669,34 @@ function renderSummary(summary) {
   const gpMetricsLine = gpBits.length
     ? `<p class="hint">${escapeHtml(gpBits.join(" · "))}</p>`
     : "";
+  const mixPacket = summary.valuation_mix_packet || {};
+  const mixMetrics = mixPacket.metrics || {};
+  const mixRows = [
+    ["Mix", mixPacket.label || (mixPacket.mix_view || {}).view, (mixPacket.mix_view || {}).evidence],
+    ["Peer fit", (mixPacket.peer_fit || {}).view, (mixPacket.peer_fit || {}).evidence],
+    ["Relative role", (mixPacket.relative_role || {}).view, (mixPacket.relative_role || {}).evidence],
+  ]
+    .filter((row) => row[1] || row[2])
+    .map(
+      ([label, view, evidence]) => `
+      <div class="decision">
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(view || "n/a")}</div>
+        <div>${escapeHtml(evidence || "No excerpt.")}</div>
+      </div>`
+    )
+    .join("");
+  const mixBits = [
+    mixPacket.dcf_weight != null && mixPacket.relative_weight != null
+      ? `${(Number(mixPacket.dcf_weight) * 100).toFixed(0)}/${(Number(mixPacket.relative_weight) * 100).toFixed(0)}`
+      : "",
+    mixMetrics.peer_count != null ? `${Number(mixMetrics.peer_count)} peers` : "",
+    mixMetrics.same_industry_count != null
+      ? `${Number(mixMetrics.same_industry_count)} same industry`
+      : "",
+  ].filter(Boolean);
+  const mixMetricsLine = mixBits.length
+    ? `<p class="hint">${escapeHtml(mixBits.join(" · "))}</p>`
+    : "";
   const architect = summary.architect_choices || {};
   const architectRows = Object.keys(architect)
     .map(
@@ -681,6 +719,9 @@ function renderSummary(summary) {
     <h2>Growth path</h2>
     ${gpMetricsLine}
     ${gpRows || "<p class='hint'>No growth-path packet on this memo.</p>"}
+    <h2>Valuation mix</h2>
+    ${mixMetricsLine}
+    ${mixRows || "<p class='hint'>No valuation-mix packet on this memo.</p>"}
     <h2>Architect labels</h2>
     ${architectRows || "<p class='hint'>No architect choices on this memo.</p>"}
     <h2>Independent audit</h2>

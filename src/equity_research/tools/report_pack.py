@@ -8,9 +8,9 @@ from .catalysts import build_catalyst_register
 from .operating_scenarios import scenario_dcf_range
 from .source_register import build_source_register
 from .street import build_thesis_pack
+from .valuation_mix import mix_weights_from_state
 
-# Same 70/30 split as a standard initiation that treats DCF as primary
-# and peer EV/EBITDA as the market cross-check.
+# Default initiation split. Firm/industry mix labels may replace these.
 DCF_WEIGHT = 0.70
 RELATIVE_WEIGHT = 0.30
 RATING_BAND = 0.15
@@ -284,9 +284,17 @@ def _assumption_rows(
     operations = state.get("operations_packet") or {}
     cycle_metrics = operations.get("metrics") or (summary.get("operating_cycle") or {})
 
-    mix_justification = (
-        "DCF is primary because it uses firm-specific growth, margin and "
-        "reinvestment. Peer EV/EBITDA is a market cross-check, not a substitute."
+    mix_packet = state.get("valuation_mix_packet") or {}
+    mix_label = mix_packet.get("label") or (
+        (mix_packet.get("mix_view") or {}).get("view")
+    )
+    mix_justification = str(
+        (mix_packet.get("mix_view") or {}).get("evidence")
+        or mix_packet.get("narrative")
+        or (
+            "DCF is primary because it uses firm-specific growth, margin and "
+            "reinvestment. Peer EV/EBITDA is a market cross-check, not a substitute."
+        )
     )
     if relative_weight == 0:
         mix_justification = (
@@ -299,7 +307,11 @@ def _assumption_rows(
             "item": "Valuation mix",
             "value": f"{dcf_weight:.0%} DCF / {relative_weight:.0%} peer EV/EBITDA",
             "justification": mix_justification,
-            "source": "Desk policy (standard initiation weights)",
+            "source": (
+                f"Python mix menu ({mix_label})"
+                if mix_label and mix_label not in {"not_applicable", "insufficient"}
+                else "Python mix menu (firm type, peer fit, industry packet)"
+            ),
         },
     ]
     selection = state.get("peer_selection") or {}
@@ -559,6 +571,15 @@ def _key_data_rows(pack: Dict[str, Any]) -> List[Dict[str, str]]:
         {"label": "Share price, last", "value": _fmt_usd(pack.get("share_price"))},
         {"label": "Upside / (downside) to PT", "value": _fmt_pct(pack.get("upside_to_pt"))},
         {"label": "Today's fair value", "value": _fmt_usd(pack.get("fair_value"))},
+        {
+            "label": "Valuation mix",
+            "value": (
+                f"{pack.get('dcf_weight'):.0%} DCF / {pack.get('relative_weight'):.0%} relative"
+                if pack.get("dcf_weight") is not None
+                and pack.get("relative_weight") is not None
+                else "N/A"
+            ),
+        },
         {"label": "DCF value / share", "value": _fmt_usd(pack.get("dcf_value"))},
         {
             "label": "Relative EV/EBITDA / share",
@@ -645,9 +666,11 @@ def build_report_pack(state: Dict[str, Any]) -> Dict[str, Any]:
     if valuation_method == "unsupported_financial":
         fair_value = None
         dcf_weight, relative_weight = 0.0, 0.0
+        mix_dcf, mix_rel = 0.0, 0.0
     else:
+        mix_dcf, mix_rel = mix_weights_from_state(state)
         fair_value, dcf_weight, relative_weight = blend_fair_value(
-            dcf_value, relative_value
+            dcf_value, relative_value, mix_dcf, mix_rel
         )
 
     target = price_target_12m(fair_value, ke, dividend)
@@ -685,6 +708,7 @@ def build_report_pack(state: Dict[str, Any]) -> Dict[str, Any]:
         "fair_value": fair_value,
         "dcf_weight": dcf_weight,
         "relative_weight": relative_weight,
+        "valuation_mix": (state.get("valuation_mix_packet") or {}).get("label"),
         "price_target_12m": target,
         "cost_of_equity": ke,
         "indicated_dividend": dividend,

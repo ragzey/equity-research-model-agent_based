@@ -94,6 +94,11 @@ def _llm_decisions(
             indent=2,
             default=str,
         )[:6000],
+        valuation_mix_json=json.dumps(
+            state.get("valuation_mix_packet") or {},
+            indent=2,
+            default=str,
+        )[:6000],
         transcript=transcript,
         qualitative=(state.get("qualitative_analysis_summary") or "")[:6000],
         outlook=(state.get("industry_outlook") or "")[:4000],

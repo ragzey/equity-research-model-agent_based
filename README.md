@@ -2,7 +2,7 @@
 
 Multi-agent equity research pipeline built around a shared **LangGraph state ledger**. Agents read and write structured financial data so valuation math stays deterministic and auditable.
 
-**Closed model (30 Aug 2026):** ticker in → Python WACC / three-stage FCFF / operating P&L / 70–30 blend / 12-month PT, plus LLM research on a clipped ledger. Full write-up: [`FINAL_MODEL.md`](FINAL_MODEL.md).
+**Closed model (30 Aug 2026):** ticker in → Python WACC / three-stage FCFF / operating P&L / labeled DCF–relative mix / 12-month PT, plus LLM research on a clipped ledger. Full write-up: [`FINAL_MODEL.md`](FINAL_MODEL.md).
 
 ## Financial Data & Technology Architecture
 

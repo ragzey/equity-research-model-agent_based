@@ -49,8 +49,8 @@ _DEFAULT_LABELS: Dict[str, str] = {
 _METHODOLOGY = (
     "Bear / base / bull change only operating menu labels: high-growth "
     "rate, high-growth years, terminal margin, sales-to-capital, and "
-    "perpetuity g. WACC, beta, size premium, and the peer EV/EBITDA "
-    "cross-check stay on the accepted base case. The published rating "
+    "perpetuity g. WACC, beta, size premium, the labeled DCF/relative mix, "
+    "and the peer EV/EBITDA cross-check stay on the accepted base case. The published rating "
     "uses the reviewer-accepted base path. Bull and bear are the most "
     "optimistic and pessimistic combinations still inside the "
     "evidence-gated allow-list, not the architect's unpublished pick. "
@@ -244,6 +244,8 @@ def _run_case(
     relative_value: Optional[float],
     ke: Optional[float],
     dividend: Optional[float],
+    mix_dcf: float = 0.70,
+    mix_rel: float = 0.30,
 ) -> Dict[str, Any]:
     wacc = float(dcf["wacc_applied"])
     terminal_wacc = float(dcf["terminal_wacc_applied"])
@@ -268,7 +270,7 @@ def _run_case(
     from .report_pack import blend_fair_value, price_target_12m
 
     dcf_ps = max(float(result["intrinsic_value_per_share"]), 0.0)
-    fair, dcf_w, rel_w = blend_fair_value(dcf_ps, relative_value)
+    fair, dcf_w, rel_w = blend_fair_value(dcf_ps, relative_value, mix_dcf, mix_rel)
     target = price_target_12m(fair, ke, dividend)
     if target is not None:
         target = max(target, 0.0)
@@ -325,6 +327,9 @@ def build_operating_scenarios(state: Dict[str, Any]) -> Optional[Dict[str, Any]]
     relative = _relative_price(state, inputs)
     ke = summary.get("cost_of_equity")
     dividend = inputs.get("indicated_dividend")
+    from .valuation_mix import mix_weights_from_state
+
+    mix_dcf, mix_rel = mix_weights_from_state(state)
     baseline_stable = (classification or {}).get("stable_sales_to_capital")
     base_labels = _base_labels(menus, applied, state)
 
@@ -362,6 +367,8 @@ def build_operating_scenarios(state: Dict[str, Any]) -> Optional[Dict[str, Any]]
             relative_value=relative,
             ke=ke,
             dividend=dividend,
+            mix_dcf=mix_dcf,
+            mix_rel=mix_rel,
         )
     except (TypeError, ValueError):
         return None
@@ -386,6 +393,8 @@ def build_operating_scenarios(state: Dict[str, Any]) -> Optional[Dict[str, Any]]
                 relative_value=relative,
                 ke=ke,
                 dividend=dividend,
+                mix_dcf=mix_dcf,
+                mix_rel=mix_rel,
             )
         except (TypeError, ValueError):
             continue

@@ -238,7 +238,8 @@ class GrowthPathNodeTests(unittest.TestCase):
         graph = build_research_graph()
         edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
         self.assertIn("growth_path", graph.nodes)
-        self.assertIn(("growth_path", "valuation_router"), edges)
+        self.assertIn(("growth_path", "valuation_mix"), edges)
+        self.assertIn(("valuation_mix", "valuation_router"), edges)
         self.assertIn(("operations", "growth_path"), edges)
 
 

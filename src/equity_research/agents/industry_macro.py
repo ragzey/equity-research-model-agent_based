@@ -641,21 +641,40 @@ def overlay_ledger_industry_views(
         filled = _pricing_from_ledger(peer_snapshot)
         if filled:
             updated["pricing_power"] = filled
-    if _block_open(updated.get("cycle"), "view"):
-        filled = _cycle_from_ledger(peer_snapshot)
-        if filled:
-            updated["cycle"] = filled
+    ledger_cycle = _cycle_from_ledger(peer_snapshot)
+    if ledger_cycle:
+        # Trailing peer/target growth owns the cycle. A fetched consumer
+        # snippet about another ticker cannot call downswing while the
+        # prints are still positive.
+        updated["cycle"] = ledger_cycle
     updated["macro"] = _macro_from_ledger(updated, risk_free_rate)
     inflection = updated.get("demand_inflection") or {}
+    category_view = str(
+        (updated.get("category_growth") or {}).get("view") or "insufficient"
+    )
+    cycle_view = _view(updated.get("cycle"))
+    inf_dir = str(
+        inflection.get("direction") or inflection.get("view") or "insufficient"
+    ).strip().lower()
     if _block_open(inflection, "direction"):
-        category_view = str(
-            (updated.get("category_growth") or {}).get("view") or "insufficient"
-        )
         updated["demand_inflection"] = {
             "direction": "none",
             "evidence": (
                 "No 10-K excerpt established a demand inflection; category growth "
                 f"is classified from the ledger as {category_view}."
+            ),
+            "source": "ledger",
+        }
+    elif (
+        inf_dir == "negative"
+        and cycle_view in {"mid", "upswing"}
+        and category_view != "below_history"
+    ):
+        updated["demand_inflection"] = {
+            "direction": "none",
+            "evidence": (
+                f"Peer/target trailing cycle is {cycle_view} and category growth "
+                f"is {category_view}; that is not a demand break for this firm."
             ),
             "source": "ledger",
         }

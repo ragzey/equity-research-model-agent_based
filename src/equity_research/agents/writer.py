@@ -133,8 +133,15 @@ def _valuation_exhibit(pack: Dict[str, Any]) -> str:
         "The DCF range is the operational bear/base/bull cases when those "
         "solve; otherwise it is the WACC / terminal-growth grid. "
         "Relative value re-rates trailing or implied EBITDA at the peer-median "
-        "EV/EBITDA. Blended fair value is today's 70/30 mix when peers exist; "
-        "the 12-month target compounds that value at the cost of equity."
+        "EV/EBITDA. Blended fair value uses the Python mix label "
+        f"{pack.get('valuation_mix') or 'base'}"
+        + (
+            f" ({_fmt_percent(pack.get('dcf_weight'))} DCF / "
+            f"{_fmt_percent(pack.get('relative_weight'))} relative)"
+            if pack.get("dcf_weight") is not None
+            else ""
+        )
+        + " when peers exist; the 12-month target compounds that value at the cost of equity."
     )
     if pack.get("relative_value") is None:
         takeaway = (
@@ -408,6 +415,57 @@ def _growth_path_table(packet: Dict[str, Any]) -> str:
     body = "\n".join(lines) + "\n"
     if narrative:
         body += f"\n### Growth-path commentary\n\n{narrative}\n"
+    return body
+
+
+def _valuation_mix_table(packet: Dict[str, Any]) -> str:
+    if not packet:
+        return ""
+    metrics = packet.get("metrics") or {}
+    rows = [
+        (
+            "Mix",
+            packet.get("label") or (packet.get("mix_view") or {}).get("view"),
+            (packet.get("mix_view") or {}).get("evidence"),
+        ),
+        (
+            "Peer fit",
+            (packet.get("peer_fit") or {}).get("view"),
+            (packet.get("peer_fit") or {}).get("evidence"),
+        ),
+        (
+            "Relative role",
+            (packet.get("relative_role") or {}).get("view"),
+            (packet.get("relative_role") or {}).get("evidence"),
+        ),
+    ]
+    lines = [
+        "### Valuation mix",
+        "",
+        "| Driver | View | Ledger evidence |",
+        "|---|---|---|",
+    ]
+    for label, view, evidence in rows:
+        lines.append(
+            f"| {label} | {view or 'insufficient'} | "
+            f"{' '.join(str(evidence or '').split()) or 'n/a'} |"
+        )
+    if packet.get("dcf_weight") is not None and packet.get("relative_weight") is not None:
+        lines.append(
+            f"| Weights | {_fmt_percent(packet.get('dcf_weight'))} DCF / "
+            f"{_fmt_percent(packet.get('relative_weight'))} relative | "
+            "Python mix menu; the LLM cannot type a percentage |"
+        )
+    if metrics.get("peer_count") is not None:
+        lines.append(
+            f"| Selected peers | {int(metrics.get('peer_count'))} "
+            f"({int(metrics.get('same_industry_count') or 0)} same industry) | "
+            "Competitive set versus target industry |"
+        )
+    narrative = str(packet.get("narrative") or "").strip()
+    body = "\n".join(lines) + "\n"
+    if narrative:
+        body += f"\n### Valuation-mix commentary\n\n{narrative}\n"
     return body
 
 
@@ -780,6 +838,11 @@ def _synthesize_narratives(
                         indent=2,
                         default=str,
                     )[:4000],
+                    valuation_mix_json=json.dumps(
+                        state.get("valuation_mix_packet") or {},
+                        indent=2,
+                        default=str,
+                    )[:4000],
                     scenarios_json=json.dumps(
                         pack.get("operating_scenarios") or {},
                         indent=2,
@@ -879,6 +942,7 @@ def _write_gui_sidecar(
         "company_products_packet": state.get("company_products_packet"),
         "operations_packet": state.get("operations_packet"),
         "growth_path_packet": state.get("growth_path_packet"),
+        "valuation_mix_packet": state.get("valuation_mix_packet"),
         "architect_choices": overrides.get("architect_choices"),
         "report_pack": pack,
         "memo_name": report_path.name,
@@ -932,6 +996,9 @@ def lead_writer_node(state: EquityResearchState) -> Dict[str, Any]:
         "peer_selection_mode": (state.get("peer_selection") or {}).get("mode"),
         "dcf_value": pack.get("dcf_value"),
         "relative_value": pack.get("relative_value"),
+        "dcf_weight": pack.get("dcf_weight"),
+        "relative_weight": pack.get("relative_weight"),
+        "valuation_mix": pack.get("valuation_mix"),
         "discount_rate": state.get("discount_rate"),
         "raw_intrinsic_value_per_share": raw_intrinsic,
         "display_intrinsic_value_per_share": display_intrinsic,
@@ -1026,6 +1093,7 @@ The table is Yahoo consensus versus the accepted model. Gaps are the thesis; the
 {_company_products_table(state.get("company_products_packet") or {})}
 {_operations_driver_table(state.get("operations_packet") or {})}
 {_growth_path_table(state.get("growth_path_packet") or {})}
+{_valuation_mix_table(state.get("valuation_mix_packet") or {})}
 ### Industry outlook
 
 {narratives["industry_outlook"]}

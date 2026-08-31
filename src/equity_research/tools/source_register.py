@@ -269,7 +269,8 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
         _row(
             "Valuation math",
             (
-                "WACC, three-stage FCFF from the operating P&L, 70/30 blend, "
+                "WACC, three-stage FCFF from the operating P&L, labeled DCF/relative "
+                "mix (dcf_heavy 90/10, base 70/30, balanced 55/45), "
                 "12-month price target, operating bull/base/bear, and ±15% "
                 "model band are computed in Python. The LLM is not a source "
                 "for those figures."
@@ -283,7 +284,7 @@ def build_source_register(state: Dict[str, Any]) -> List[Dict[str, str]]:
         _row(
             "Narrative agents",
             (
-                "Competitive, Qualitative, industry/macro, company/products, operations, assumption architect, "
+                "Competitive, Qualitative, industry/macro, company/products, operations, growth-path, valuation-mix, assumption architect, "
                 "assumption reviewer, writer, and independent auditor call OpenAI or "
                 "Gemini on ledger evidence. They may not invent tickers, URLs, or DCF "
                 "inputs. Market/industry/firm URLs appear only when Python fetched an "

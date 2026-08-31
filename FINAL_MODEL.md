@@ -48,8 +48,9 @@ Unit tests: **148 passing** at close (`python -m unittest discover -s tests -q`)
 
 ```text
 Unlevered FCFF  = NOPAT − reinvestment
-Fair value      = 70% DCF + 30% peer-median EV/EBITDA
-                  (100% DCF if there is no usable peer multiple)
+Fair value      = labeled mix of DCF and peer-median EV/EBITDA
+                  (base 70/30; dcf_heavy 90/10; balanced 55/45;
+                   100% DCF if there is no usable peer multiple)
 12-month PT     = FV × (1 + cost of equity) − indicated DPS
 Model band      = Buy if PT upside ≥ 15%, Sell if ≤ −15%, else Hold
 ```
@@ -89,7 +90,8 @@ The thesis spine is Python (“Street mean 12-month target is $X versus this mod
 ```text
 Aggregator
   → Competitive ∥ Qualitative
-  → Industry/macro ∥ Operations
+  → Industry/macro ∥ Company/products ∥ Operations
+  → Growth-path → Valuation-mix
   → Router (financials stop here)
   → Architect (labels) → Reviewer (accept/reject)
   → Quant (Python WACC + P&L + FCFF)
@@ -106,6 +108,8 @@ Aggregator
 | Qualitative | Item 1A / Item 7; section-tagged evidence |
 | Industry / macro | Category, pricing, cycle, rates, inflection — views, not DCF numbers |
 | Operations | CCC, NWC, reinvestment; skipped for financials |
+| Growth-path | Scale-up horizon, STC fade, margin path |
+| Valuation-mix | Labeled DCF/relative weights from firm type, peer fit, industry |
 | Architect | Pick a label from a Python menu |
 | Reviewer | Accept or reject. Cannot type a new rate |
 | Quant | CAPM, WACC, P&L, three-stage FCFF |
@@ -171,6 +175,6 @@ Do not treat old files in `outputs/reports/` as the current pipeline. Those fold
 
 ## Scope
 
-- **In:** Non-financial operating companies. FCFF + 70/30 relative blend.  
+- **In:** Non-financial operating companies. FCFF + labeled relative blend (base 70/30).  
 - **Out:** Banks, insurers, brokers (router withholds FCFF). OpenBB is planned, not wired. Finnhub cannot list “all bonds for ticker X”; ISINs are CLI or conservative 10-K harvest.  
 - **Not claimed:** Independent verification of a target price, or that LLM prose is a substitute for a human analyst.

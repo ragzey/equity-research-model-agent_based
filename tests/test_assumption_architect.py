@@ -141,9 +141,41 @@ class MenuPolicyTests(unittest.TestCase):
             "high",
             allowed_growth_choices({}, firm_type="Scale-up High-Growth"),
         )
+        self.assertNotIn(
+            "low",
+            allowed_growth_choices({}, firm_type="Scale-up High-Growth"),
+        )
+        self.assertNotIn(
+            "low",
+            allowed_growth_choices({}, firm_type="High-Growth Large-Cap"),
+        )
         self.assertIn(
             "extend",
             allowed_year_choices({}, firm_type="Scale-up High-Growth"),
+        )
+        self.assertNotIn(
+            "compress",
+            allowed_year_choices({}, firm_type="Scale-up High-Growth"),
+        )
+        self.assertIn(
+            "extend",
+            allowed_year_choices({}, firm_type="High-Growth Large-Cap"),
+        )
+        self.assertNotIn(
+            "compress",
+            allowed_year_choices({}, firm_type="High-Growth Large-Cap"),
+        )
+        self.assertNotIn(
+            "low",
+            allowed_growth_choices({}, firm_type="Mature Large-Cap"),
+        )
+        self.assertNotIn(
+            "compress",
+            allowed_year_choices({}, firm_type="Mature Large-Cap"),
+        )
+        self.assertEqual(
+            allowed_year_choices({}, firm_type="Mature Large-Cap"),
+            ["base"],
         )
 
     def test_numeric_llm_growth_falls_back_to_base(self):
@@ -183,7 +215,11 @@ class MenuPolicyTests(unittest.TestCase):
                 "cycle": {
                     "view": "downswing",
                     "evidence": "The cycle is a downswing in the category.",
-                }
+                },
+                "demand_inflection": {
+                    "direction": "negative",
+                    "evidence": "Demand inflection is negative in the category.",
+                },
             },
         )
         self.assertLess(hostile, high_growth)
@@ -485,6 +521,46 @@ class PacketAndNodeTests(unittest.TestCase):
         self.assertIn("high", allowed_growth_choices(filled))
         self.assertTrue(filled["narrative"])
 
+    def test_ledger_cycle_overrides_consumer_article_downswing(self):
+        filled = overlay_ledger_industry_views(
+            {
+                "category_growth": {
+                    "view": "in_line",
+                    "evidence": "Historical revenue CAGR is 6.5%.",
+                    "source": "ledger",
+                },
+                "cycle": {
+                    "view": "downswing",
+                    "evidence": "middle-class consumers are growing more tight-fisted",
+                },
+                "demand_inflection": {
+                    "direction": "negative",
+                    "evidence": "middle-class consumers are growing more tight-fisted",
+                },
+            },
+            historical_cagr=0.065,
+            consensus=None,
+            peer_snapshot={
+                "target": "TJX",
+                "metrics": {
+                    "TJX": {"revenue_growth_yoy_pct": 5.4, "operating_margin_pct": 10.9},
+                    "ROST": {"revenue_growth_yoy_pct": 7.0, "operating_margin_pct": 17.6},
+                    "ULTA": {"revenue_growth_yoy_pct": 4.0, "operating_margin_pct": 12.5},
+                },
+            },
+            risk_free_rate=0.0476,
+        )
+        self.assertIn(filled["cycle"]["view"], {"mid", "upswing"})
+        self.assertEqual(filled["demand_inflection"]["direction"], "none")
+        self.assertNotIn(
+            "low",
+            allowed_growth_choices(filled, firm_type="Mature Large-Cap"),
+        )
+        self.assertNotIn(
+            "compress",
+            allowed_year_choices(filled, firm_type="Mature Large-Cap"),
+        )
+
     def test_trailing_consensus_does_not_unlock_high_band(self):
         filled = overlay_ledger_industry_views(
             {"category_growth": {"view": "insufficient", "evidence": ""}},
@@ -627,7 +703,8 @@ class PacketAndNodeTests(unittest.TestCase):
         self.assertIn(("industry_macro", "growth_path"), edges)
         self.assertIn(("company_products", "growth_path"), edges)
         self.assertIn(("operations", "growth_path"), edges)
-        self.assertIn(("growth_path", "valuation_router"), edges)
+        self.assertIn(("growth_path", "valuation_mix"), edges)
+        self.assertIn(("valuation_mix", "valuation_router"), edges)
         self.assertIn(("assumption_architect", "valuation_assumption_reviewer"), edges)
 
 
