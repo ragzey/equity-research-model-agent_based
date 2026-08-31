@@ -563,7 +563,11 @@ function renderSummary(summary) {
     .map(
       ([label, view, evidence]) => `
       <div class="decision">
-        <div class="who">${escapeHtml(label)} · ${escapeHtml(view || "insufficient")}</div>
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(
+          view && view !== "insufficient"
+            ? view
+            : "insufficient 10-K or ledger evidence"
+        )}</div>
         <div>${escapeHtml(evidence || "No excerpt.")}</div>
       </div>`
     )
@@ -579,7 +583,11 @@ function renderSummary(summary) {
     .map(
       ([label, view, evidence]) => `
       <div class="decision">
-        <div class="who">${escapeHtml(label)} · ${escapeHtml(view || "insufficient")}</div>
+        <div class="who">${escapeHtml(label)} · ${escapeHtml(
+          view && view !== "insufficient"
+            ? view
+            : "insufficient statement evidence"
+        )}</div>
         <div>${escapeHtml(evidence || "No excerpt.")}</div>
       </div>`
     )

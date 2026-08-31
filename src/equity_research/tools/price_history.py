@@ -86,7 +86,9 @@ def fetch_rebased_price_history(
 
     Failures return None so the rest of the pipeline can still write a memo.
     """
-    clean = ticker.strip().upper()
+    from .sec_api import resolve_listed_symbol
+
+    clean = resolve_listed_symbol(ticker) or ticker.strip().upper()
     bench = benchmark.strip().upper()
     cache_key = f"{clean}:{bench}:{period}"
     cached = cache_get("price_history", cache_key, TTL_PRICE_HISTORY)

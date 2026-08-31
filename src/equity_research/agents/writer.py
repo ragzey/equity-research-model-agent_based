@@ -207,8 +207,11 @@ def _industry_driver_table(packet: Dict[str, Any]) -> str:
         "|---|---|---|",
     ]
     for label, view, evidence in rows:
+        shown = view or "insufficient"
+        if str(shown).strip().lower() == "insufficient":
+            shown = "insufficient 10-K or ledger evidence"
         lines.append(
-            f"| {label} | {view or 'insufficient'} | "
+            f"| {label} | {shown} | "
             f"{' '.join(str(evidence or '').split()) or 'n/a'} |"
         )
     rf = (packet.get("macro") or {}).get("risk_free_rate")

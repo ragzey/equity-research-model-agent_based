@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 from ..agents.quant import fetch_ten_year_treasury_yield
 from ..graphs.desk import ARCHITECT, INDUSTRY_MACRO, REVIEWER, WRITER, make_message
@@ -244,6 +244,226 @@ def normalize_industry_macro_packet(
     }
 
 
+LEDGER_GROWTH_GAP = 0.02
+PRICING_GAP_POINTS = 3.0
+CYCLE_GROWTH_POINTS = 2.0
+
+
+def _block_open(block: Any, field: str) -> bool:
+    if not isinstance(block, dict):
+        return True
+    view = str(block.get(field) or "insufficient").strip().lower()
+    evidence = str(block.get("evidence") or "").strip()
+    return view == "insufficient" or not evidence
+
+
+def _forward_consensus_growth(consensus: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not isinstance(consensus, dict):
+        return None
+    source = str(consensus.get("source") or "").lower()
+    if "trailing" in source:
+        return None
+    try:
+        growth = float(consensus.get("growth"))
+    except (TypeError, ValueError):
+        return None
+    if growth != growth:
+        return None
+    return growth
+
+
+def _category_from_ledger(
+    historical_cagr: Optional[float],
+    consensus: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, str]]:
+    if historical_cagr is None:
+        return None
+    forward = _forward_consensus_growth(consensus)
+    if forward is None:
+        return {
+            "view": "in_line",
+            "evidence": (
+                f"Historical revenue CAGR is {historical_cagr:.1%}; no forward "
+                "consensus growth was available to classify category growth versus history."
+            ),
+            "source": "ledger",
+        }
+    gap = forward - historical_cagr
+    if gap >= LEDGER_GROWTH_GAP:
+        view = "above_history"
+    elif gap <= -LEDGER_GROWTH_GAP:
+        view = "below_history"
+    else:
+        view = "in_line"
+    source = str((consensus or {}).get("source") or "consensus")
+    return {
+        "view": view,
+        "evidence": (
+            f"Forward {source} growth {forward:.1%} versus historical revenue "
+            f"CAGR {historical_cagr:.1%}."
+        ),
+        "source": "ledger",
+    }
+
+
+def _margins_from_snapshot(
+    snapshot: Optional[Dict[str, Any]],
+) -> Tuple[Optional[float], Optional[float], Optional[str]]:
+    snapshot = snapshot or {}
+    metrics = snapshot.get("metrics") or {}
+    target = str(snapshot.get("target") or "").strip().upper()
+    target_row = metrics.get(target) if target else None
+    target_margin = None
+    if isinstance(target_row, dict):
+        try:
+            target_margin = float(target_row.get("operating_margin_pct"))
+        except (TypeError, ValueError):
+            target_margin = None
+    peers: List[float] = []
+    for symbol, row in metrics.items():
+        if str(symbol).strip().upper() == target or not isinstance(row, dict):
+            continue
+        try:
+            peers.append(float(row.get("operating_margin_pct")))
+        except (TypeError, ValueError):
+            continue
+    if target_margin is None or not peers:
+        return target_margin, None, target or None
+    peers.sort()
+    mid = peers[len(peers) // 2]
+    return target_margin, mid, target or None
+
+
+def _pricing_from_ledger(snapshot: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    target_margin, peer_median, ticker = _margins_from_snapshot(snapshot)
+    if target_margin is None or peer_median is None or not ticker:
+        return None
+    gap = target_margin - peer_median
+    if gap >= PRICING_GAP_POINTS:
+        view = "strong"
+    elif gap <= -PRICING_GAP_POINTS:
+        view = "weak"
+    else:
+        view = "neutral"
+    return {
+        "view": view,
+        "evidence": (
+            f"{ticker} operating margin {target_margin / 100.0:.1%} versus peer "
+            f"median {peer_median / 100.0:.1%}."
+        ),
+        "source": "ledger",
+    }
+
+
+def _cycle_from_ledger(snapshot: Optional[Dict[str, Any]]) -> Optional[Dict[str, str]]:
+    snapshot = snapshot or {}
+    metrics = snapshot.get("metrics") or {}
+    growths: List[float] = []
+    for row in metrics.values():
+        if not isinstance(row, dict):
+            continue
+        try:
+            growths.append(float(row.get("revenue_growth_yoy_pct")))
+        except (TypeError, ValueError):
+            continue
+    if not growths:
+        return None
+    growths.sort()
+    median = growths[len(growths) // 2]
+    if median >= CYCLE_GROWTH_POINTS:
+        view = "upswing"
+    elif median <= -CYCLE_GROWTH_POINTS:
+        view = "downswing"
+    else:
+        view = "mid"
+    return {
+        "view": view,
+        "evidence": (
+            f"Peer and target trailing revenue growth median is {median:.1f} percent."
+        ),
+        "source": "ledger",
+    }
+
+
+def _macro_from_ledger(
+    packet: Dict[str, Any],
+    risk_free_rate: Optional[float],
+) -> Dict[str, Any]:
+    macro = dict(packet.get("macro") or {})
+    if risk_free_rate is None:
+        return macro
+    evidence = str(macro.get("evidence") or "").strip()
+    rates = str(macro.get("rates_view") or "insufficient").strip().lower()
+    if rates == "insufficient" or not evidence:
+        treasury = f"10-year Treasury yield is {risk_free_rate:.2%}"
+        if not evidence:
+            macro["evidence"] = treasury + "."
+        elif treasury.lower() not in evidence.lower():
+            macro["evidence"] = f"{evidence} {treasury}."
+        if rates == "insufficient":
+            macro["rates_view"] = "neutral"
+        macro["source"] = "ledger"
+    macro["risk_free_rate"] = risk_free_rate
+    return macro
+
+
+def overlay_ledger_industry_views(
+    packet: Dict[str, Any],
+    *,
+    historical_cagr: Optional[float],
+    consensus: Optional[Dict[str, Any]],
+    peer_snapshot: Optional[Dict[str, Any]],
+    risk_free_rate: Optional[float],
+) -> Dict[str, Any]:
+    """Fill views the 10-K quote filter left empty, using numbers already on the ledger.
+
+    Does not invent tickers or DCF outputs. Stretch labels still require
+    above-history or a positive inflection after this overlay.
+    """
+    updated = dict(packet or {})
+    if _block_open(updated.get("category_growth"), "view"):
+        filled = _category_from_ledger(historical_cagr, consensus)
+        if filled:
+            updated["category_growth"] = filled
+    if _block_open(updated.get("pricing_power"), "view"):
+        filled = _pricing_from_ledger(peer_snapshot)
+        if filled:
+            updated["pricing_power"] = filled
+    if _block_open(updated.get("cycle"), "view"):
+        filled = _cycle_from_ledger(peer_snapshot)
+        if filled:
+            updated["cycle"] = filled
+    updated["macro"] = _macro_from_ledger(updated, risk_free_rate)
+    inflection = updated.get("demand_inflection") or {}
+    if _block_open(inflection, "direction"):
+        category_view = str(
+            (updated.get("category_growth") or {}).get("view") or "insufficient"
+        )
+        updated["demand_inflection"] = {
+            "direction": "none",
+            "evidence": (
+                "No 10-K excerpt established a demand inflection; category growth "
+                f"is classified from the ledger as {category_view}."
+            ),
+            "source": "ledger",
+        }
+    if not str(updated.get("narrative") or "").strip():
+        bits = []
+        for key, field in (
+            ("category_growth", "evidence"),
+            ("pricing_power", "evidence"),
+            ("cycle", "evidence"),
+        ):
+            text = str((updated.get(key) or {}).get(field) or "").strip()
+            if text:
+                bits.append(text)
+        macro_ev = str((updated.get("macro") or {}).get("evidence") or "").strip()
+        if macro_ev:
+            bits.append(macro_ev)
+        updated["narrative"] = " ".join(bits)
+    return updated
+
+
 def _driver_lines(packet: Dict[str, Any]) -> List[str]:
     lines = []
     mapping = [
@@ -342,6 +562,13 @@ def industry_macro_node(state: EquityResearchState) -> Dict[str, Any]:
         ledger_text=ledger_text,
         filing_text="\n".join(part for part in (filing_text, excerpts) if part),
         allowed_tickers=allowed_tickers,
+    )
+    packet = overlay_ledger_industry_views(
+        packet,
+        historical_cagr=cagr,
+        consensus=consensus if isinstance(consensus, dict) else None,
+        peer_snapshot=snapshot,
+        risk_free_rate=risk_free_rate,
     )
     narrative = packet.get("narrative") or "Industry and macro evidence was insufficient."
     body = (

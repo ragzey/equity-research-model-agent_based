@@ -11,6 +11,7 @@ from equity_research.agents.industry_macro import (
     _ground_narrative,
     industry_macro_node,
     normalize_industry_macro_packet,
+    overlay_ledger_industry_views,
 )
 from equity_research.agents.reviewer import valuation_assumption_reviewer_node
 from equity_research.graphs.defaults import initial_state
@@ -368,6 +369,64 @@ class PacketAndNodeTests(unittest.TestCase):
         )
         self.assertEqual(packet["category_growth"]["view"], "above_history")
         self.assertIn("high", allowed_growth_choices(packet))
+
+    def test_ledger_overlay_fills_apple_style_insufficient_packet(self):
+        empty = normalize_industry_macro_packet(
+            {},
+            risk_free_rate=0.041,
+            ledger_text="Historical revenue CAGR is 3.0%",
+            filing_text="Risk factors include competition.",
+        )
+        self.assertEqual(empty["category_growth"]["view"], "insufficient")
+        filled = overlay_ledger_industry_views(
+            empty,
+            historical_cagr=0.03,
+            consensus={
+                "growth": 0.06,
+                "source": "yahoo_revenue_estimate_+1y",
+            },
+            peer_snapshot={
+                "target": "AAPL",
+                "metrics": {
+                    "AAPL": {
+                        "operating_margin_pct": 30.0,
+                        "revenue_growth_yoy_pct": 2.0,
+                    },
+                    "MSFT": {
+                        "operating_margin_pct": 42.0,
+                        "revenue_growth_yoy_pct": 15.0,
+                    },
+                    "GOOGL": {
+                        "operating_margin_pct": 28.0,
+                        "revenue_growth_yoy_pct": 10.0,
+                    },
+                },
+            },
+            risk_free_rate=0.041,
+        )
+        self.assertEqual(filled["category_growth"]["view"], "above_history")
+        self.assertEqual(filled["category_growth"]["source"], "ledger")
+        self.assertEqual(filled["pricing_power"]["view"], "weak")
+        self.assertEqual(filled["cycle"]["view"], "upswing")
+        self.assertEqual(filled["macro"]["rates_view"], "neutral")
+        self.assertIn("4.10%", filled["macro"]["evidence"])
+        self.assertEqual(filled["demand_inflection"]["direction"], "none")
+        self.assertIn("high", allowed_growth_choices(filled))
+        self.assertTrue(filled["narrative"])
+
+    def test_trailing_consensus_does_not_unlock_high_band(self):
+        filled = overlay_ledger_industry_views(
+            {"category_growth": {"view": "insufficient", "evidence": ""}},
+            historical_cagr=0.03,
+            consensus={
+                "growth": 0.20,
+                "source": "yahoo_info_revenueGrowth_trailing",
+            },
+            peer_snapshot=None,
+            risk_free_rate=0.04,
+        )
+        self.assertEqual(filled["category_growth"]["view"], "in_line")
+        self.assertNotIn("high", allowed_growth_choices(filled))
 
     @patch("equity_research.agents.industry_macro.fetch_ten_year_treasury_yield", return_value=0.04)
     @patch("equity_research.agents.industry_macro.chat_json")

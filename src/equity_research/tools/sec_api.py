@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -21,6 +22,26 @@ DEFAULT_USER_AGENT = "EquityResearchAgent/1.0 (finance.student@example.com)"
 SEC_REQUEST_TIMEOUT = 30
 SEC_MIN_INTERVAL_SECONDS = 0.2
 MAX_SECTION_CHARS = 50_000
+# Used only when the SEC listing map is down or the operator typed a name.
+# These are directory aliases, not invented tickers.
+ISSUER_ALIASES = {
+    "APPLE": "AAPL",
+    "APPLEINC": "AAPL",
+    "MICROSOFT": "MSFT",
+    "MICROSOFTCORP": "MSFT",
+    "GOOGLE": "GOOGL",
+    "ALPHABET": "GOOGL",
+    "ALPHABETINC": "GOOGL",
+    "AMAZON": "AMZN",
+    "AMAZONCOM": "AMZN",
+    "NVIDIA": "NVDA",
+    "TESLA": "TSLA",
+    "META": "META",
+    "FACEBOOK": "META",
+    "NETFLIX": "NFLX",
+    "COSTCO": "COST",
+    "COSTCOWHOLESALE": "COST",
+}
 
 SECTION_BOUNDARIES = {
     "1A": (("ITEM 1A.", "ITEM 1A"), ("ITEM 1B.", "ITEM 1B")),
@@ -54,28 +75,111 @@ def _sec_get(url: str, timeout: Optional[int] = None) -> requests.Response:
     return response
 
 
+def _company_ticker_map() -> Dict[str, Any]:
+    cached = cache_get("sec_tickers", "all", TTL_TICKER_MAP)
+    if isinstance(cached, dict) and cached:
+        return cached
+    payload = _sec_get("https://www.sec.gov/files/company_tickers.json").json()
+    if isinstance(payload, dict):
+        cache_set("sec_tickers", "all", payload)
+        return payload
+    return {}
+
+
+def _alnum_key(text: str) -> str:
+    return re.sub(r"[^A-Z0-9]", "", str(text or "").upper())
+
+
+def _name_key(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", str(text or "").lower()))
+
+
+def resolve_listed_symbol(
+    query: str,
+    ticker_data: Optional[Dict[str, Any]] = None,
+) -> Optional[str]:
+    """
+    Map a ticker or a company name to an SEC-listed symbol.
+
+    'AAPL' stays AAPL. 'Apple' / 'APPLE' / 'Apple Inc.' resolve to AAPL.
+    """
+    raw = str(query or "").strip()
+    if not raw:
+        return None
+    symbol = raw.upper().replace(" ", "")
+    symbol = symbol.replace("_", "-")
+    alias = ISSUER_ALIASES.get(_alnum_key(raw)) or ISSUER_ALIASES.get(_alnum_key(symbol))
+    if alias:
+        logger.info("Resolved issuer %r to listed ticker %s via alias", raw, alias)
+        return alias
+    if re.fullmatch(r"[A-Z]{1,5}(?:[.-][A-Z]{1,2})?", symbol):
+        return symbol
+
+    try:
+        listing = ticker_data if isinstance(ticker_data, dict) else _company_ticker_map()
+    except Exception:
+        logger.exception("SEC ticker map unavailable while resolving %s", raw)
+        listing = {}
+    entries = [
+        row
+        for row in (listing or {}).values()
+        if isinstance(row, dict) and row.get("ticker")
+    ]
+    by_ticker = {str(row["ticker"]).strip().upper(): row for row in entries}
+    if symbol in by_ticker:
+        return symbol
+
+    needle = _name_key(raw)
+    if len(needle.replace(" ", "")) < 4:
+        return None
+
+    ranked: List[Tuple[int, int, str]] = []
+    for row in entries:
+        ticker = str(row.get("ticker") or "").strip().upper()
+        title_n = _name_key(row.get("title") or "")
+        if not ticker or not title_n:
+            continue
+        reit = any(token in title_n.split() for token in ("reit", "etf", "trust"))
+        first = title_n.split(" ", 1)[0]
+        needle_first = needle.split(" ", 1)[0]
+        if title_n == needle:
+            score = 0
+        elif title_n.startswith(f"{needle} ") or needle.startswith(f"{title_n} "):
+            score = 1 if not reit else 5
+        elif first == needle_first and needle_first == needle and not reit:
+            score = 2
+        elif first == needle_first and needle_first == needle:
+            score = 6
+        elif f" {needle} " in f" {title_n} " and not reit:
+            score = 3
+        else:
+            continue
+        ranked.append((score, len(title_n), ticker))
+    if ranked:
+        ranked.sort()
+        resolved = ranked[0][2]
+        logger.info("Resolved issuer %r to listed ticker %s", raw, resolved)
+        return resolved
+    return None
+
+
 def get_cik_for_ticker(ticker: str) -> Optional[str]:
     """Map a ticker to its 10-digit SEC CIK."""
-    clean_ticker = ticker.strip().upper()
-    cached_cik = cache_get("sec_cik", clean_ticker, TTL_TICKER_MAP)
+    listed = resolve_listed_symbol(ticker) or ticker.strip().upper()
+    cached_cik = cache_get("sec_cik", listed, TTL_TICKER_MAP)
     if isinstance(cached_cik, str) and cached_cik:
         return cached_cik
     try:
-        ticker_data = cache_get("sec_tickers", "all", TTL_TICKER_MAP)
-        if not isinstance(ticker_data, dict):
-            ticker_data = _sec_get(
-                "https://www.sec.gov/files/company_tickers.json"
-            ).json()
-            cache_set("sec_tickers", "all", ticker_data)
+        ticker_data = _company_ticker_map()
         for entry in ticker_data.values():
-            if entry["ticker"] == clean_ticker:
+            if str(entry.get("ticker") or "").upper() == listed:
                 cik = str(entry["cik_str"]).zfill(10)
-                logger.info("CIK resolved: %s -> %s", clean_ticker, cik)
-                cache_set("sec_cik", clean_ticker, cik)
+                logger.info("CIK resolved: %s -> %s", listed, cik)
+                cache_set("sec_cik", listed, cik)
                 return cik
-        logger.error("CIK not found for ticker: %s", clean_ticker)
+        logger.error("CIK not found for ticker: %s", listed)
     except Exception:
-        logger.exception("Error fetching CIK mapping for %s", clean_ticker)
+        logger.exception("Error fetching CIK mapping for %s", listed)
     return None
 
 

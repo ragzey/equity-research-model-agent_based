@@ -29,6 +29,7 @@ from .sec_api import (
     fetch_latest_10k_text,
     fetch_sec_section,
     get_cik_for_ticker,
+    resolve_listed_symbol,
     sourced_filing_payload,
 )
 from .peer_discovery import (
@@ -81,6 +82,7 @@ __all__ = [
     "measure_operating_cycle",
     "generate_valuation_overrides",
     "get_cik_for_ticker",
+    "resolve_listed_symbol",
     "get_outstanding_bonds_for_ticker",
     "is_financial_services_firm",
     "perform_3stage_dcf_valuation",

@@ -13,7 +13,11 @@ from ..tools.firm_classifier import is_financial_services_firm
 from ..tools.market_api import fetch_financial_statements
 from ..tools.peer_discovery import discover_peer_candidates, hydrate_peer_metadata
 from ..tools.price_history import fetch_rebased_price_history
-from ..tools.sec_api import fetch_latest_10k_sections, sourced_filing_payload
+from ..tools.sec_api import (
+    fetch_latest_10k_sections,
+    resolve_listed_symbol,
+    sourced_filing_payload,
+)
 
 logger = logging.getLogger("DataAggregator")
 
@@ -25,9 +29,13 @@ def aggregator_node(state: EquityResearchState) -> Dict[str, Any]:
     Returns a partial state update dict for LangGraph (not a full state copy).
     """
     ticker = state["ticker"].strip().upper()
+    listed = resolve_listed_symbol(ticker) or ticker
+    if listed != ticker:
+        logger.info("Mapped issuer %s to listed ticker %s.", ticker, listed)
+    ticker = listed
     logger.info("Aggregator starting data pull for %s", ticker)
 
-    updates: Dict[str, Any] = {}
+    updates: Dict[str, Any] = {"ticker": ticker}
     info: Dict[str, Any] = {}
 
     # 1. Yahoo Finance statements

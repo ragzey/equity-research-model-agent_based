@@ -17,6 +17,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from equity_research.graphs.defaults import initial_state
 from equity_research.graphs.graph import build_research_graph
+from equity_research.tools.sec_api import resolve_listed_symbol
 from equity_research.utils.llm_client import llm_session, require_llm
 
 logger = logging.getLogger("ResearchPipelineCLI")
@@ -41,7 +42,8 @@ def run_pipeline(
     llm_provider: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Initialize state, invoke the compiled graph, and return final state."""
-    clean_ticker = ticker.strip().upper()
+    listed = resolve_listed_symbol(ticker) or ticker.strip().upper()
+    clean_ticker = listed.strip().upper()
     if not clean_ticker:
         raise ValueError("Ticker cannot be empty.")
     peers = [

@@ -98,7 +98,9 @@ def extract_consensus_growth(
     Trailing `revenueGrowth` is used only if the estimate table is missing.
     This is sell-side consensus, not a company forecast.
     """
-    clean = ticker.strip().upper()
+    from .sec_api import resolve_listed_symbol
+
+    clean = resolve_listed_symbol(ticker) or ticker.strip().upper()
     cached = cache_get("consensus", clean, TTL_CONSENSUS)
     if isinstance(cached, dict) and "forward_eps" in cached:
         return cached

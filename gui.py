@@ -339,9 +339,12 @@ def api_meta():
 @app.post("/api/run")
 def api_run():
     payload = request.get_json(silent=True) or {}
-    ticker = str(payload.get("ticker") or "").strip().upper()
-    if not ticker:
+    raw_ticker = str(payload.get("ticker") or "").strip()
+    if not raw_ticker:
         return jsonify({"error": "Ticker is required."}), 400
+    from equity_research.tools.sec_api import resolve_listed_symbol
+
+    ticker = (resolve_listed_symbol(raw_ticker) or raw_ticker).strip().upper()
     year = str(payload.get("target_year") or date.today().year).strip()
     peers = _parse_symbols(str(payload.get("peers") or ""))
     bonds = _parse_symbols(str(payload.get("bonds") or ""))
