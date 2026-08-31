@@ -1,6 +1,6 @@
 # Implementation Log — Hybrid Bond Architecture
 
-**Date:** 2026-08-29  
+**Date:** 2026-08-31 (sections through assumption auditor). Earlier dated blocks are historical.  
 **Session goal:** Wire the hybrid fixed-income strategy (Finnhub TRACE primary + Damodaran fallback) into working agent nodes, with honest documentation.
 
 ---
@@ -280,4 +280,114 @@ compiled MSFT graph invocation.
 
 ---
 
-*End of implementation log.*
+## Closed FCFF desk and report pack (2026-08-30)
+
+**Why this block exists:** after Qualitative + the first compiled graph, the
+desk still lacked industry/operations packets, labeled assumption menus,
+an independent memo auditor, operating P&L, scenarios, catalysts, and
+Street comparison. Those landed in `d489374` / `75a7793`.
+
+- Industry/macro and assumption architect: categorical views and labeled
+  menus; stretch labels need ledger reasons; economy-linked terminal *g*.
+- Operations: Python CCC / NWC / STC; banks skip the corporate working-
+  capital path.
+- Independent memo auditor: citations and invented tickers; cannot rewrite
+  WACC or DCF.
+- Operating P&L on the same fiscal path as unlevered FCFF. Bear/base/bull
+  change operating labels only; WACC stays on base.
+- Dated catalysts from Yahoo / 10-K. Model versus Street with a Python
+  thesis spine.
+- Hallucination close: `www.` as well as `http(s)`; empty allow-lists do
+  not reopen `high` / `light`.
+
+Financial-firm DDM / FR Y-9C work was **removed**. Yahoo Financials skip
+FCFF. **Why:** a fabricated bank model is worse than an honest withhold.
+
+---
+
+## Name → ticker, SEC facts, products, web research (2026-08-31)
+
+| Piece | Why |
+| --- | --- |
+| `resolve_listed_symbol` | Operators type names; runs must still be a listed ticker |
+| SEC companyfacts overlay | Yahoo / 10-K quotes can be thin; do not invent statements |
+| `company_products` node | Industry was mixing SKUs with category demand |
+| `web_research.py` | Market size lives on IR/web; LLM must not mint URLs |
+
+Python fetches allowlisted hosts. Agents copy `source_url` values already
+on that list.
+
+---
+
+## Scale-up lifecycle and growth-path (2026-08-31)
+
+**Why:** high P/S hyper-growth names (NBIS-class) were parameterized as
+mature compounders. Last year's P&L is not the firm the market is pricing.
+
+- `Scale-up High-Growth` when P/S ≥ 15, CAGR ≥ 25%, and revenue is material.
+- Base cap 50%; stretch 80% only with a **forward** sales-growth estimate.
+- Terminal margin floored so later overlays cannot pull it under the
+  classifier.
+- Growth-path agent proposes extend / fade / scale. Mature → `not_applicable`.
+
+Do not reverse-engineer P/S into growth. Do not invent TAM.
+
+---
+
+## Labeled mix and stacked-recession cut (2026-08-31)
+
+**Why:** GUI runs of NBIS, TJX, TPR, and MNST all printed Sell.
+
+**NBIS.** DCF ~$177 vs ~$205 last (~−14%, Hold on DCF). 70/30 × trailing
+EV/EBITDA ~$18 → FV ~$129 Sell. Mix is now a label. `dcf_heavy` = 90/10 when
+P/S ≥ 15, scale-up, or EBITDA non-positive. Overlay overwrites forged
+floats. Scale-ups cannot pick `balanced`.
+
+**TJX.** Industry tagged downswing from a Walmart/Home Depot consumer
+snippet while TJX CAGR was 6.5% and category `in_line`. That stacked 2%
+growth, 2-year horizon, 1.5% *g*, and heavy STC. Fixes:
+
+- Cycle = peer/target trailing growth median.
+- Negative inflection cleared when cycle is mid/upswing and category is not
+  `below_history`.
+- `_hostile_macro` = downswing **and** (negative inflection **or**
+  below-history).
+- Mature stays on classifier-base growth, years, and *g* unless hostile.
+- Heavy STC needs lengthening CCC or heavy reinvestment.
+- Distressed EV/EBITDA outliers dropped from the peer median (Kohl’s-type
+  5× must not pull an off-price set).
+- Mature terminal margin holds current.
+
+High-growth cutoff: **10%** trailing CAGR (was 15%). High-growth / scale-up
+cannot pick `low` / `compress` without a real hostile packet; they get
+`extend` without a constructive industry packet.
+
+---
+
+## Assumption auditor (2026-08-31)
+
+**Why:** a second independent check was requested. Reviewer accept/reject
+and memo-auditor comments on the same labels would rubber-stamp each other.
+
+- Node sits after reviewer, before Quant.
+- Python overlay + LLM.
+- Action: **revert to classifier baseline only**. No new rates, no DCF
+  numbers.
+- Memo auditor stays last: narrative, citations, frozen PT/FV/WACC/rating.
+  It does not re-decide growth, years, or perpetuity *g*.
+
+**Verified:** 218 unit tests (`python -m unittest discover -s tests -q`).
+Live graph:
+
+```text
+Aggregator → Competitive ∥ Qualitative
+  → Industry/macro ∥ Company/products ∥ Operations
+  → Growth-path → Valuation-mix → Router
+  → Architect → Reviewer → Assumption auditor
+  → Quant → Post-quant → Sensitivity → Writer → Memo auditor
+```
+
+---
+
+*End of implementation log. Source of truth for the live desk: [`FINAL_MODEL.md`](FINAL_MODEL.md).*
+

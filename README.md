@@ -2,7 +2,7 @@
 
 Multi-agent equity research pipeline built around a shared **LangGraph state ledger**. Agents read and write structured financial data so valuation math stays deterministic and auditable.
 
-**Closed model (30 Aug 2026):** ticker in → Python WACC / three-stage FCFF / operating P&L / labeled DCF–relative mix / 12-month PT, plus LLM research on a clipped ledger. Full write-up: [`FINAL_MODEL.md`](FINAL_MODEL.md).
+**Current desk (31 Aug 2026):** ticker in → Python WACC / three-stage FCFF / operating P&L / labeled DCF–relative mix / 12-month PT, plus LLM research on a clipped ledger. Full write-up: [`FINAL_MODEL.md`](FINAL_MODEL.md). Older session logs are historical; the 31 August passes (scale-up path, mix, assumption auditor) are recorded there and below.
 
 ## Financial Data & Technology Architecture
 
@@ -27,7 +27,7 @@ Corporate bonds trade **over-the-counter (OTC)** rather than on centralized publ
 
 ### 1. Market data layer — implemented (`yfinance` + SEC EDGAR)
 
-**Today:** Financial statements are pulled via **`yfinance`** (`market_api.py`) and cached locally in SQLite (`tools/cache.py`, default 12 hours). Qualitative filing text comes from **SEC EDGAR** (`sec_api.py`) — latest 10-K Item 1A (Risk Factors) and Item 7 (MD&A), with Item 8 used only for conservative bond-identifier harvest. CIK maps, submissions JSON, and 10-K text are cached (ticker map 24 hours; filings 7 days).
+**Today:** Financial statements are pulled via **`yfinance`** (`market_api.py`) and cached locally in SQLite (`tools/cache.py`, default 12 hours). When Yahoo is thin, **SEC companyfacts** (`sec_facts.py`) overlay the ledger. Qualitative filing text comes from **SEC EDGAR** (`sec_api.py`) — latest 10-K Item 1A (Risk Factors) and Item 7 (MD&A), with Item 8 used only for conservative bond-identifier harvest. A company name maps to a listed ticker. CIK maps, submissions JSON, and 10-K text are cached (ticker map 24 hours; filings 7 days). Allowlisted IR/news pages are fetched in Python (`web_research.py`); the LLM does not browse.
 
 **Roadmap:** [**OpenBB**](https://docs.openbb.co/) as a unified, vendor-agnostic gateway for statements, macro series, and yield curves. OpenBB is **not wired in yet**; the current connectors are deliberate, minimal, and tested.
 
@@ -72,15 +72,22 @@ When TRACE data is empty, illiquid, or unavailable:
 | Quant Analyst node | `agents/quant.py` | ✅ live `^TNX`, logs pathway |
 | Competitive Analyst node | `agents/competitive.py` | ✅ harvested/pinned comps; no invented tickers |
 | Qualitative Analyst node | `agents/qualitative.py` | ✅ evidence-only synthesis + section-tagged quotes |
-| Industry / macro node | `agents/industry_macro.py` | ✅ categorical demand/cycle packet; filing-grounded |
+| Name → ticker | `tools/sec_api.py`, `agents/aggregator.py` | ✅ listed-ticker resolve; Yahoo aliases |
+| SEC companyfacts overlay | `tools/sec_facts.py`, `tools/market_api.py` | ✅ fills statements when Yahoo or 10-K quotes are thin |
+| Allowlisted web research | `tools/web_research.py` | ✅ Python-fetched IR/SEC/high-quality pages; LLM may copy quotes and URLs, not mint them |
+| Industry / macro node | `agents/industry_macro.py` | ✅ categorical demand/cycle packet; peer-growth cycle overlays generic consumer snippets |
+| Company / products node | `agents/company_products.py` | ✅ Item 1 products, mix, firm catalysts; not category growth |
 | Operations node | `agents/operations.py`, `tools/operating_cycle.py` | ✅ Python CCC/NWC/STC; skipped for financials |
+| Growth-path node | `agents/growth_path.py` | ✅ scale-up horizon / STC fade / margin path; not_applicable for mature names |
+| Valuation-mix node | `agents/valuation_mix.py`, `tools/valuation_mix.py` | ✅ labeled mix only (`dcf_heavy` 90/10, `base` 70/30, `balanced` 55/45); LLM cannot type a percentage |
 | Assumption architect | `agents/assumption_architect.py`, `tools/assumption_menus.py` | ✅ labeled menus only; stretch labels need ledger reasons |
 | Qual → Quant reviewer | `agents/reviewer.py` | ✅ accept/reject only; no invented DCF numbers |
-| Independent auditor | `agents/independent_auditor.py` | ✅ per-agent narrative check; cannot rewrite WACC/DCF |
-| Research desk handoffs | `graphs/desk.py`, `agent_messages` | ✅ Qual / Competitive / Industry / Operations / Architect / Reviewer / Writer |
+| Assumption auditor | `agents/assumption_auditor.py`, `tools/assumption_audit.py` | ✅ independent second check before Quant; may only revert to classifier baseline |
+| Memo auditor | `agents/independent_auditor.py` | ✅ per-agent narrative check; cannot rewrite WACC/DCF or re-decide growth labels |
+| Research desk handoffs | `graphs/desk.py`, `agent_messages` | ✅ Qual / Competitive / Industry / Products / Operations / Growth-path / Mix / Architect / Reviewer / Assumption auditor / Writer / Memo auditor |
 | LangGraph `StateGraph` | `graphs/graph.py` | ✅ compiled and tested |
 | OpenBB gateway | — | ⏳ planned |
-| Firm lifecycle classifier | `tools/firm_classifier.py` | ✅ bounded fallback when statements cannot support STC |
+| Firm lifecycle classifier | `tools/firm_classifier.py` | ✅ mature / high-growth / scale-up (P/S ≥ 15 and CAGR ≥ 25%); high-growth starts at 10% CAGR |
 | WACC + 3-stage FCFF DCF | `tools/valuation.py`, `agents/quant.py` | ✅ |
 | Post-Quant arithmetic review | `agents/post_quant_reviewer.py` | ✅ bounded retry + FCFF durability diagnostics |
 | 5x5 DCF sensitivity | `agents/sensitivity.py` | ✅ WACC ±100 bp; *g* centered on applied perpetuity |
@@ -89,7 +96,7 @@ When TRACE data is empty, illiquid, or unavailable:
 | Operating bear/base/bull | `tools/operating_scenarios.py`, `agents/sensitivity.py` | ✅ Evidence-gated menus; WACC held at base |
 | Dated catalysts | `tools/catalysts.py` | ✅ Yahoo / 10-K dates; no invented dates |
 | Model versus Street | `tools/street.py` | ✅ Yahoo fields + Python thesis spine |
-| URL / ticker grounding | `utils/grounding.py`, auditor / writer / qualitative | ✅ `www.` and `http(s)` dropped from LLM prose |
+| URL / ticker grounding | `utils/grounding.py`, auditor / writer / qualitative | ✅ unsourced `www.` and `http(s)` dropped; allowlisted fetched URLs may be copied |
 
 ### Design correction vs. generic tutorials
 
@@ -106,10 +113,14 @@ src/equity_research/
 │   ├── competitive.py
 │   ├── qualitative.py
 │   ├── industry_macro.py
+│   ├── company_products.py
 │   ├── operations.py
+│   ├── growth_path.py
+│   ├── valuation_mix.py
 │   ├── assumption_architect.py
-│   ├── valuation_router.py
 │   ├── reviewer.py
+│   ├── assumption_auditor.py
+│   ├── valuation_router.py
 │   ├── quant.py
 │   ├── post_quant_reviewer.py
 │   ├── sensitivity.py
@@ -122,22 +133,21 @@ src/equity_research/
 │   └── graph.py
 └── tools/
     ├── market_api.py
-    ├── cache.py
-    ├── consensus.py
+    ├── web_research.py
+    ├── sec_facts.py
+    ├── sec_api.py
     ├── operating_cycle.py
     ├── assumption_menus.py
-    ├── bond_identifiers.py
-    ├── catalysts.py
-    ├── operating_scenarios.py
-    ├── street.py
-    ├── pdf_memo.py
-    ├── sec_api.py
-    ├── finnhub_bond.py
+    ├── assumption_audit.py
+    ├── valuation_mix.py
     ├── firm_classifier.py
     ├── peer_analysis.py
-    ├── qual_to_quant.py
-    ├── debt_analysis.py
-    └── valuation.py
+    ├── peer_discovery.py
+    ├── operating_scenarios.py
+    ├── street.py
+    ├── report_pack.py
+    ├── valuation.py
+    └── …
 ```
 
 Current FCFF path:
@@ -145,11 +155,13 @@ Current FCFF path:
 ```text
 Aggregator
   → Competitive ∥ Qualitative
-  → Industry/macro ∥ Operations
+  → Industry/macro ∥ Company/products ∥ Operations
+  → Growth-path → Valuation-mix
   → Router (financials stop)
   → Architect (labels) → Reviewer (accept/reject)
-  → Quant (Python WACC + FCFF)
-  → Post-quant → Sensitivity → Writer → Auditor
+  → Assumption auditor (revert only)
+  → Quant (Python WACC + P&L + FCFF)
+  → Post-quant → Sensitivity → Writer → Memo auditor
 ```
 
 ## Setup
@@ -165,7 +177,7 @@ SEC_USER_AGENT="MyResearchProject/1.0 (replace-with-your-real-email)"
 ```
 Replace the placeholder with a monitored contact address before querying EDGAR.
 
-**LLM (required for Competitive, Qualitative, industry/macro, operations, architect, reviewer, writer, auditor):** OpenAI (`OPENAI_API_KEY`, `sk-…`) or Gemini from [Google AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` or `GOOGLE_API_KEY`, `AIza…`). Paste the key in the GUI, or:
+**LLM (required for Competitive, Qualitative, industry/macro, company/products, operations, growth-path, valuation-mix, architect, reviewer, assumption auditor, writer, memo auditor):** OpenAI (`OPENAI_API_KEY`, `sk-…`) or Gemini from [Google AI Studio](https://aistudio.google.com/apikey) (`GEMINI_API_KEY` or `GOOGLE_API_KEY`, `AIza…`). Paste the key in the GUI, or:
 
 ```
 python main.py --ticker TJX --openai-api-key AIza... --llm-provider gemini
@@ -190,7 +202,7 @@ python main.py --ticker MSFT
 python gui.py
 ```
 
-Open [http://127.0.0.1:5050](http://127.0.0.1:5050). The local desk UI runs a ticker, streams the log, and shows the memo, accept/reject decisions, and downloads. It binds to localhost only.
+Open [http://127.0.0.1:5050](http://127.0.0.1:5050). The local desk UI runs a ticker, streams the log, and shows the memo, mix, assumption audit, accept/reject decisions, and downloads. It binds to localhost only. Flask debug is off; restart after Python or static changes and hard-refresh so `app.js?v=research14` loads.
 
 Peers and bond ISINs are optional. Additional arguments:
 
@@ -235,8 +247,23 @@ Year-1/Year-2 Yahoo consensus, when available and inside a 40% absolute cap, is 
 4. [FINRA TRACE](https://www.finra.org/filing-reporting/trace)  
 5. [Finnhub Bond API](https://finnhub.io/docs/api/bond-tick)  
 
+## Why the 31 August passes exist
+
+GUI runs of **NBIS, TJX, TPR, and MNST** all printed **Sell**. Two failures were model policy, not the tape:
+
+1. **Scale-ups (NBIS).** Trailing EV/EBITDA was ~$18 versus a DCF around $177. A fixed 70/30 blend pulled fair value to a Sell even though DCF alone was inside the ±15% Hold band. Last year’s P&L is not the firm the market is pricing when P/S is 15×+ and CAGR is hyper. The desk now has a **Scale-up High-Growth** lifecycle, a **growth-path** agent (extend / fade / scale), and a **labeled mix** (`dcf_heavy` 90/10 when EV/EBITDA is a poor descriptor). The LLM cannot type a percentage. Stretch 80% growth still needs a **forward** sales-growth estimate on the ledger.
+2. **Mature compounders (TJX).** The industry agent tagged a downswing from a Yahoo article about Walmart/Home Depot consumers. TJX’s own ledger was 6.5% CAGR and category growth **in_line**. That snippet stacked **2% growth, a 2-year horizon, 1.5% perpetuity *g*, and heavy STC**. Peer median EV/EBITDA was also pulled by a distressed department-store multiple. Cycle now follows **peer/target trailing growth**. Low / compress / low *g* need a real hostile packet. Distressed EV/EBITDA outliers are dropped from the median. Heavy STC needs a lengthening CCC or heavy reinvestment, not one year of inventory.
+
+The **assumption auditor** (`3ced79d`) is a second independent agent **before Quant**. It may only revert labels to the classifier baseline. The **memo auditor** still runs last and does not re-decide growth, years, or perpetuity *g*. Two auditors on the same accept/reject pass would rubber-stamp each other.
+
+High-growth classification starts at **10%** trailing CAGR (was 15%) so 10–15% growers use the 8–20% / 5-year rail instead of mature 2–7% / 3 years. Mid-single-digit compounders stay mature. The ±15% Buy/Hold/Sell band, no invented TAM, and no reverse-engineering P/S into growth are unchanged.
+
+Unit tests: **218** passing (`python -m unittest discover -s tests -q`).
+
 ## Logs
 
-- `FINAL_MODEL.md` — closed model: what was built, lock-ins, graph, hallucination controls  
-- `PROJECT_LOG.md` — early project chronology  
-- `IMPLEMENTATION_LOG.md` — implementation rationale and earlier audit fixes  
+- `FINAL_MODEL.md` — current model: lock-ins, graph, 31 August passes, hallucination controls
+- `PROJECT_LOG.md` — chronology (scaffold through 31 August)
+- `WORK_LOG.md` — session work notes, including why later agents were added
+- `IMPLEMENTATION_LOG.md` — implementation rationale and earlier audit fixes
+

@@ -1,6 +1,6 @@
 # Equity Research Pipeline — Project Log
 
-**Last updated:** 2026-08-29 (historical). The closed model is documented in [`FINAL_MODEL.md`](FINAL_MODEL.md).  
+**Last updated:** 2026-08-31. The live model is documented in [`FINAL_MODEL.md`](FINAL_MODEL.md). Sections 1–17 are historical; 18+ record the close and the 31 August passes.  
 **Workspace:** `C:\Equity research model`  
 **Purpose:** Multi-agent equity research pipeline (LangGraph target architecture)
 
@@ -325,4 +325,109 @@ the bank branch and safely withholds an unreviewed valuation. See
 
 ---
 
-*End of log.*
+## 18. Financial-firm path removed; FCFF-only desk (2026-08-30)
+
+The bank DDM, FR Y-9C / iXBRL ingestion, and bank CLI flags were removed.
+Yahoo Financial Services / Financials tickers skip valuation and write a
+restrained out-of-scope memo. The production model is three-stage FCFF for
+non-financial operating companies.
+
+**Why:** A fabricated bank model was worse than an honest withhold. The desk
+is not a bank-equity product.
+
+## 19. Closed research desk (`d489374`, `75a7793`, 2026-08-30)
+
+Operating P&L on the same fiscal path as FCFF. Evidence-gated bear/base/bull
+(WACC held at base). Dated catalysts from Yahoo / 10-K only. Model versus
+Street with a Python thesis spine. Shared URL detector (`www.` as well as
+`http(s)`). Missing allow-lists no longer reopen `high` / `light`.
+
+**Why:** The memo was quoting Street and writing catalysts without a Python
+owner, and stretch labels could reopen when an allow-list was empty.
+
+Documented lock-ins: Python owns WACC / DCF / P&L / PT; the LLM may not
+invent tickers, DCF numbers, URLs, or citations. Runs are ticker-only.
+
+## 20. Name → ticker and SEC facts (`c7ab2f9`, 2026-08-31)
+
+`resolve_listed_symbol` maps a company name or alias to an SEC-listed ticker.
+When Yahoo statements or 10-K quotes are thin, SEC companyfacts overlay the
+ledger.
+
+**Why:** Operators type names as well as tickers. Empty Yahoo / thin 10-K
+left agents inventing or stalling. Facts already published at the SEC should
+fill the ledger before anyone writes prose.
+
+## 21. Company/products agent and allowlisted web research (`9190f19`, 2026-08-31)
+
+New parallel node beside industry/macro and operations. Industry stays on
+category demand/cycle. Company/products owns Item 1 products, mix, and firm
+catalysts. `web_research.py` fetches allowlisted IR/SEC/high-quality pages;
+the LLM copies quotes and `source_url` values already on that list.
+
+**Why:** Industry views were mixing **this firm's products** with **category
+TAM**. Market-size language lives on IR and news, not in the 10-K. The LLM
+must not mint URLs.
+
+## 22. Scale-up High-Growth lifecycle (`3e0dbfe`, 2026-08-31)
+
+Classifier: P/S ≥ 15, CAGR ≥ 25%, and material revenue → `Scale-up High-Growth`
+(8-year explicit, 20–50% base cap, terminal margin floored). Terminal margin
+is no longer pulled below that floor.
+
+**Why:** NBIS-like names were valued as mature 2–7% / 3-year rails. Last
+year's P&L is not the firm the market is pricing. The desk still does not
+reverse-engineer P/S into growth to match the tape.
+
+## 23. Growth-path agent (`0fc21b0`, 2026-08-31)
+
+Proposes extend / fade / scale for scale-up names (horizon, STC fade from
+build-phase, margin path). Mature names get `not_applicable`. Overlay clips
+the packet to the ledger.
+
+**Why:** A scale-up needs a path, not last year's print copied forward.
+Without this node the architect had no evidenced reason to extend years or
+fade STC.
+
+## 24. Labeled mix and stacked-recession cut (`91ce064`, 2026-08-31)
+
+Labeled DCF/relative mix: `dcf_heavy` 90/10, `base` 70/30, `balanced` 55/45.
+Python overwrites forged percentages. Scale-ups / P/S ≥ 15 / non-positive
+EBITDA default to `dcf_heavy` and cannot pick `balanced`.
+
+High-growth classification starts at 10% trailing CAGR (was 15%). Peer/target
+trailing growth owns the industry cycle. Hostile macro requires downswing
+**and** (negative inflection or below-history). Mature names stay on
+classifier-base growth, years, and perpetuity *g* unless demand is actually
+hostile. Heavy STC needs a lengthening CCC or heavy reinvestment. Distressed
+EV/EBITDA outliers are dropped from the peer median. Mature terminal margin
+holds current (no 5% fade).
+
+**Why:** Live GUI runs of NBIS, TJX, TPR, and MNST all printed Sell.
+
+- NBIS: DCF ~$177 vs ~$205 is Hold on DCF alone; 70/30 × trailing EV/EBITDA
+  ~$18 pulled FV to a Sell. Trailing EV/EBITDA is a poor descriptor on
+  scale-ups.
+- TJX: a Yahoo snippet about Walmart/Home Depot consumers tagged downswing
+  while TJX CAGR was 6.5% and category `in_line`. That stacked 2% growth,
+  2 years, 1.5% *g*, and heavy STC. A Kohl’s-type 5× multiple was also
+  pulling the off-price peer median.
+
+The desk does not manufacture Buys. Mid-single-digit compounders stay mature.
+
+## 25. Assumption auditor (`3ced79d`, 2026-08-31)
+
+Independent node after the reviewer and before Quant. Python overlay plus
+LLM. May only **revert** labels to the classifier baseline. Memo auditor
+(`independent_auditor`) stays last: citations, invented tickers, frozen
+figures. It cannot re-decide growth, years, or perpetuity *g*.
+
+**Why:** The user asked for a second independent auditor. Putting two agents
+on the same accept/reject pass would rubber-stamp each other.
+
+**Verification:** 218 unit tests passing.
+
+---
+
+*End of log. Live graph, lock-ins, and hallucination controls: [`FINAL_MODEL.md`](FINAL_MODEL.md).*
+

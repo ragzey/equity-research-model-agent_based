@@ -1,7 +1,7 @@
 # Equity Research Pipeline — Work Log
 
 **Project:** `C:\Equity research model`  
-**Log date:** 2026-08-29
+**Log date:** 2026-08-29 (sections 1–26). Sections 27+ are 31 August 2026.
 
 ## 1. Initial project scaffold
 
@@ -649,4 +649,72 @@ Working-capital and reinvestment inputs are no longer a firm-type constant.
 - Sensitivity terminal growth is centered on the applied perpetuity, not a
   fixed 1.50%–2.50% band.
 - `README.md` matches the live desk graph.
+
+## 27. Name → ticker, SEC facts, company/products, web research (2026-08-31)
+
+Ticker-only runs remain the contract. Operators still type names (`Apple`),
+so the aggregator maps to a listed symbol via SEC `company_tickers.json` and
+Yahoo aliases. Thin Yahoo / 10-K quotes overlay SEC companyfacts so the
+ledger is not empty.
+
+Industry/macro was writing product and TAM language from memory or from a
+category article. That mixed **this firm** with **the industry**. A parallel
+company/products agent now owns Item 1 products, mix, and firm catalysts.
+Allowlisted web research is Python-fetched; agents may quote and copy those
+URLs only.
+
+**Why it occurred:** empty or mixed evidence was the hallucination path.
+Filing-only industry views could not cite market size honestly, and they
+were the wrong place for SKU/product narrative.
+
+## 28. Scale-up lifecycle and growth-path (2026-08-31)
+
+`Scale-up High-Growth`: P/S ≥ 15, CAGR ≥ 25%, material revenue. Base growth
+capped at 50%; stretch 80% only with a forward sales-growth estimate on the
+ledger. Terminal margin floored so the classifier cannot be pulled under it.
+
+Growth-path proposes extend / fade / scale for those names. Mature names
+are `not_applicable`.
+
+**Why it occurred:** NBIS-class names were running mature 2–7% / 3-year
+rails. Last year's P&L is not the firm the market is pricing. Reverse-
+engineering P/S into growth to match the tape stays forbidden.
+
+## 29. Labeled mix, 10% high-growth cutoff, no stacked recession (2026-08-31)
+
+GUI sidecars (NBIS, TJX, TPR, MNST) were **all Sell**.
+
+NBIS: DCF Hold-ish (~$177 vs ~$205, about −14%). 70/30 with trailing
+EV/EBITDA ~$18 → FV ~$129 Sell. Mix is now a **label**. `dcf_heavy` is 90/10
+when EV/EBITDA is a poor descriptor. The LLM cannot type 72/28.
+
+TJX: industry tagged downswing + negative inflection from a Walmart/Home
+Depot consumer article while TJX CAGR was 6.5% `in_line`. That stacked
+low growth, compress years, low *g*, and heavy STC. Even bull sat ~$97 vs
+$134. Fixes: peer/target trailing growth owns cycle; hostile needs
+downswing **and** (negative inflection or below-history); mature stays on
+classifier base unless truly hostile; heavy STC needs CCC lengthening or
+heavy reinvestment; distressed EV/EBITDA outliers dropped from the median;
+mature terminal margin holds current.
+
+High-growth cutoff moved from 15% to 10% CAGR so 10–15% growers use the
+high-growth rail (8–20% / 5 years), not mature 2–7% / 3 years. Compounders
+at mid-single-digit CAGR stay mature. High-growth/scale-up cannot pick
+`low` or `compress` without a real hostile packet; they get `extend`
+without a constructive industry packet.
+
+**Why it occurred:** the Sell cluster was two policy bugs (relative weight
+on a junk multiple; recession stack from an off-ticker snippet), not a
+house view that every name is expensive.
+
+## 30. Assumption auditor (2026-08-31)
+
+Second independent agent before Quant. Revert-only. Memo auditor remains
+last and does not re-pick labels.
+
+**Why it occurred:** one accept/reject pass plus a memo check on the same
+decisions is not independence. Two auditors on one pass would agree with
+each other by construction.
+
+Verification: **218** automated tests.
 
